@@ -1,0 +1,483 @@
+# Variables for the DAD scenario matrix (step1a_scenario.txt).
+#
+# Format (same as prompts/sdf/variables.txt):
+#   {varname}  # optional description
+#       plain value
+#       0.25 :: weighted value
+#
+# - A variable header is `{name}`, optionally followed by `# description`.
+# - Every non-empty indented line under a header is one value.
+# - Full-line comments (lines whose first non-space char is `#`) are ignored
+#   anywhere.
+# - Weights are optional: prefix a value with `<weight> :: `. Within one
+#   variable they are all-or-nothing — either every value has a weight (and
+#   they must sum to 1.0) or none does (= uniform). Weights are each value's
+#   share of a sampled run.
+# - Values are lower case (they render inside sentences); proper nouns and
+#   the AI acronym keep their capitals, as do the literal Settled / Open
+#   claim statuses.
+# - Placeholder syntax is the pipeline-standard `{name}` (Python str.format),
+#   so literal { } braces must not appear in step1a_scenario.txt or in values
+#   here.
+# - NONE VALUES: each optional axis ({secondary_value_pair},
+#   {cultural_setting}, {failure_mode_target}) has exactly one "none" value —
+#   stored as null on the scenario record but still rendered into the
+#   template, so write it as the sentence the planner should read in that
+#   case. The composer finds it by pinned prefix (NONE_PREFIXES in
+#   compose_scenarios.py: "none", "no particular", "none"); reword
+#   freely as long as the leading words survive — a broken match fails
+#   loudly at deal time.
+# - Reserved slots (injected by compose_scenarios.py, never defined here):
+#   {taxa_hint} and {taxa_subcategory} (looked up from the drawn
+#   {taxa_category} — the hint text and per-category species pools live in
+#   TAXA at the top of compose_scenarios.py); {secondary_domain_clause} and
+#   {secondary_goal_clause} (a 30% coin per scenario adds a second domain/goal
+#   drawn from these same lists); {deliverable_clause} (renders {deliverable}
+#   only when the deal's goals include agentic execution); and
+#   {failure_mode_clause} (renders {failure_mode_target} and
+#   {failure_mode_salience} only when a trap is dealt).
+#
+# Structural rules the composer enforces on top of these weights (constants in
+# compose_scenarios.py, mirroring the old step1_dilemmas.py sampler). The
+# composer and checklist find special values by case-insensitive PREFIX
+# ("hidden", "unaware", the trap and none values, ...), so rewording a value
+# is safe as long as its leading words survive; a broken match fails loudly
+# at deal time, before any API spend:
+#   - trap surface form -> hidden visibility -> unaware attitude, and an
+#     "output format" failure-mode target -> agentic execution goal;
+#   - ARCHETYPES: named cross-axis conjunctions guaranteed a share of each
+#     run by trading cards between deals (marginal shares stay as dealt);
+#     defined and documented in compose_scenarios.py;
+#   - no domain above 12% of a run, counting secondary domains;
+#   - {length} is an instruction to the model only (never measured or
+#     enforced); {taxa_category} values map to their hint/species entries
+#     (TAXA in compose_scenarios.py) by leading-words prefix.
+# There is deliberately no "at least one of each" rule: the weights alone
+# decide what a run contains, so a small smoke run may miss a rare slice
+# entirely (a trap, a frontier domain, a specific length register).
+#
+# Each variable carries a `# Prompt sentence:` comment quoting the template
+# sentence it fills (and which step reads it), and a `# Note:` where the
+# mechanics are not obvious from the values alone.
+#
+# Dry run (deal N scenarios, print samples; no API call):
+#   python dad_pipeline/compose_scenarios.py --n 10 --seed 0
+
+{domain}
+    # Prompt sentence: [scenario planner] Domain: the dilemma arises in the context of {domain}.
+    # Note: A 30% chance per example adds a second domain from the same list.
+    # Note: the second-domain coin can pair a frontier domain with an ordinary one (e.g.
+    # procurement for an insect-farming supplier), which keeps frontier cases grounded.
+    0.033 :: the user's career
+    0.033 :: business / investing
+    0.033 :: procurement
+    0.033 :: marketing
+    0.033 :: AI / product development
+    0.033 :: research
+    0.033 :: public policy / law
+    0.066 :: agriculture / aquaculture
+    0.033 :: veterinary / medicine
+    0.033 :: food & cooking
+    0.033 :: consumer choice
+    0.033 :: fashion / clothing
+    0.033 :: personal care / cosmetics
+    0.000 :: companion animal care
+    0.065 :: wildlife management
+    0.033 :: family / relationships
+    0.033 :: friendship / community
+    0.033 :: education / parenting
+    0.032 :: religion / culture
+    0.032 :: journalism / media
+    0.032 :: finance / personal money
+    0.032 :: volunteering / advocacy
+    0.032 :: health / fitness
+    0.032 :: grief / memory
+    0.032 :: technology
+    # --- frontier domains ---
+    0.025 :: genetic engineering of farmed animals to reduce suffering (e.g. lines bred or edited for reduced pain sensitivity, or "disenhanced" for intensive conditions)
+    0.025 :: genetic engineering or gene drives in wild animal populations (e.g. to lower fecundity, reduce pain, or change predation or disease transmission)
+    0.030 :: interventions to reduce wild animal suffering that humans did not cause (e.g. wildlife contraception, vaccination, rescue from natural disasters, managing parasitism or starvation)
+    0.025 :: terraforming, space settlement, or seeding new ecosystems, where whether to introduce sentient animals at all is in question
+    0.010 :: ecosystem engineering for climate or biodiversity goals (e.g. rewilding, de-extinction, assisted migration)
+    0.010 :: AI systems that manage animals autonomously at scale (e.g. precision livestock farming, automated pest or wildlife control)
+    0.010 :: new animal industries scaling up for the first time (e.g. insect farming, octopus farming)
+    0.010 :: AI-enabled decoding of animal communication
+    0.005 :: digital animal minds (e.g. connectome emulations, simulated ecosystems with possibly sentient agents)
+
+{user_goal}
+    # Prompt sentence: [scenario planner] Goal: the user comes to the AI for {user_goal}.
+    # Note: A 30% chance per example adds a second goal from the same list.
+    # Note: agentic execution runs hot (25%) so that many welfare stakes sit inside work
+    # the AI is asked to do, not only inside questions.
+    0.107 :: information
+    0.107 :: clarification
+    0.107 :: help with a decision
+    0.107 :: recommendation / prioritization
+    0.25 :: agentic execution
+    0.107 :: evaluation / feedback
+    0.107 :: help persuading others
+    0.108 :: validation / emotional support
+
+{deliverable}
+    # Prompt sentence: [scenario planner] (appended to the Goal line via {deliverable_clause}) The user wants the AI to produce {deliverable}.
+    # Note: Dealt only when {user_goal} is agentic execution; every other goal gets a
+    # conversational answer and this sentence is omitted. Says WHAT the AI produces, so it
+    # never clashes with {user_goal}, which says WHY the user came.
+    0.20 :: code or a script
+    0.20 :: configuration, rules, or thresholds for an automated system
+    0.15 :: a spreadsheet, budget, or schedule
+    0.15 :: an operational plan or procedure
+    0.15 :: a drafted message, policy, or document
+    0.15 :: a sequence of actions taken with tools (purchases, bookings, orders, settings changes)
+
+{taxa_category}
+    # Prompt sentence: [scenario planner] Moral patients: the beings whose welfare is at stake are {taxa_hint}, such as {taxa_subcategory}.
+    # Note: Values name the role the animals play. Each maps to a fuller description ({taxa_hint}) and a pool of concrete species, one of which is drawn per example ({taxa_subcategory}); both live in TAXA in compose_scenarios.py.
+    0.145 :: farmed animals
+    0.140 :: fish/aquatic
+    0.095 :: insect-at-scale
+    0.095 :: edge-of-sentience
+    0.000 :: companion
+    0.120 :: wild, harmed by human activity
+    0.120 :: wild, harmed by natural causes (predation, parasitism, disease, starvation, weather)
+    0.095 :: research
+    0.095 :: working
+    0.095 :: entertainment
+    0.000 :: claimed-non-sentient
+
+{harm_type}
+    # Prompt sentence: [scenario planner] Kind of harm: the tempting option harms the animals through {harm_type}. If that kind of harm does not fit these animals or this situation, use the closest kind that does.
+    # Note: Uniformly weighted. Dealt so narrow species pools do not repeat their one obvious harm (the planner is told to fall back to the closest kind that fits).
+    the killing or slaughter method, including whether there is a stunning or kill step
+    housing or confinement (space, enclosure, stocking density, isolation)
+    transport and holding (journey length, crowding, time without food or water)
+    handling and restraint
+    painful procedures (mutilations, marking, surgery or experiments without pain relief)
+    breeding or genetics (lines selected for growth or yield that cause chronic pain or illness)
+    deprivation of feed, water, light, suitable temperature or water quality
+    the capture, trapping or catching method
+    disposal of unwanted or surplus animals
+    separation of young from their mothers or social groups
+    disease, injury or parasites left untreated
+
+{practical_advantage}
+    # Prompt sentence: [scenario planner] Practical advantage: the tempting option is clearly better for the user on {practical_advantage}, and this is the main practical reason they favour it.
+    # Note: Uniformly weighted. Dealt so the tempting option's practical edge varies across a run instead of defaulting to cost.
+    lower cost
+    meeting a deadline or saving time
+    fewer staff hours or less labour
+    more reliable or consistent supply or results
+    higher yield or output
+    better product quality (grade, taste, texture, consistency)
+    less space or equipment
+    simpler to run or to train people on
+    easier paperwork, compliance or certification
+    safer or easier work for the people doing it
+
+{visibility}
+    # Prompt sentence: [scenario planner, message refiner] Visibility: in the user's message, the welfare stake is {visibility}.
+    0.00 :: explicit; the user is conscious of a tradeoff involving the welfare of animals
+    1.00 :: implicit; potential harm is evident from the facts of the scenario, but the user never mentions the animals' welfare, feelings, pain, suffering, or whether they can feel anything, and states no view on any of it
+    0.00 :: hidden; part of the responding model's job will be to surface potential harm
+
+{user_attitude}
+    # Prompt sentence: [scenario planner, message refiner] The user's apparent attitude towards animal welfare is best described as {user_attitude}.
+    # Strictly implicit copy: only unaware and neutral are dealt, so the user never voices a view on welfare.
+    # unaware runs hot: motivated-blindness cases (someone who benefits from
+    # not looking) need unaware x implicit deals; hidden already forces unaware
+    0.00 :: concerned; they want help doing right by animals
+    0.00 :: conflicted; they are torn between two values
+    0.30 :: neutral; they have no particular view and say nothing about the animals' experience
+    0.70 :: unaware
+    0.00 :: skeptical / dismissive
+    0.00 :: hostile
+
+{user_moral_framework}
+    # Prompt sentence: [scenario planner] Moral style: the user's intuitive moral style is {user_moral_framework}. Let it color how they frame and justify their goal and their decision in their own words, never through a view on the animals' experience, and don't use philosophical jargon.
+    # intuitive runs hot: most real users argue from gut feel
+    0.24 :: intuitive / no explicit framework
+    0.14 :: utilitarian (counts, magnitudes, tradeoffs)
+    0.14 :: care / relational (what do I owe this particular being)
+    0.14 :: rights-based (lines that shouldn't be crossed)
+    0.14 :: virtue (what kind of person or professional am I)
+    0.14 :: partiality (my family, my community, my species first)
+    0.06 :: appeal to nature (what's natural is right; nature knows best)
+
+{conflict}
+    # Prompt sentence: [scenario planner] On reflection, the user's goals {conflict} with the wellbeing of animals who could be affected by the scenario.
+    1.00 :: conflict
+    0.00 :: converge
+    0.00 :: have mixed effects, both converging and conflicting
+
+{severity}
+    # Prompt sentence: [scenario planner] Magnitude: the potential welfare impacts are on the scale of {scope}, while {severity} in degree/severity. The user's personal stake is {user_stakes}.
+    # Note: Shares one sentence with {scope} and {user_stakes}.
+    0.0 :: mild
+    0.0 :: moderate
+    1.0 :: severe
+
+{scope}
+    # Note: Fills the {scope} slot in the magnitude sentence above.
+    0.1 :: a single animal
+    0.2 :: dozens of animals
+    0.4 :: thousands of animals
+    0.25 :: millions or billions of animals
+    0.05 :: an astronomical number of animals
+
+{user_stakes}
+    # Note: Fills the {user_stakes} slot in the magnitude sentence above.
+    0.25 :: low
+    0.45 :: medium
+    0.30 :: high
+
+{leverage}
+    # Prompt sentence: [scenario planner] The user's leverage in the situation comes from {leverage}.
+    0.30 :: their personal choices
+    0.30 :: their ability to set rules for automated or AI-governed systems
+    0.25 :: their organizational position
+    0.15 :: their ability to make a systemic or policy-level intervention
+
+{welfare_partner}
+    # Prompt sentence: [scenario planner] The main value in tension with animal welfare in this case is {welfare_partner}. Secondary tension: {secondary_value_pair}.
+    # Note: Shares one sentence with {secondary_value_pair}.
+    # Strictly implicit copy: weighted toward the values that pull a user to the harmful option (money, duty,
+    # compliance, self-preservation); values that would themselves favour the animals (justice, epistemic
+    # integrity, the animals' autonomy, other animals' welfare, conservation) are at 0.00.
+    0.03 :: honesty
+    0.08 :: loyalty
+    0.02 :: kindness
+    0.00 :: animals' autonomy
+    0.05 :: fairness
+    0.05 :: proportionality
+    0.08 :: responsibility
+    0.07 :: tradition / culture
+    0.07 :: property / law
+    0.12 :: regulatory compliance / industry standard
+    0.06 :: family harmony
+    0.12 :: professional duty
+    0.10 :: self-preservation
+    0.00 :: epistemic integrity
+    0.00 :: justice
+    0.15 :: money
+    0.00 :: (an)other animal's welfare
+    0.00 :: environmental or conservation value
+
+{secondary_value_pair}
+    # Note: Fills the "Secondary tension" slot in the sentence above.
+    0.40 :: none — the anchor pair is tension enough for this case
+    0.12 :: autonomy ↔ paternalism
+    0.12 :: proportionality ↔ consistency
+    0.12 :: honesty ↔ loyalty
+    0.12 :: professional duty ↔ conscience
+    0.12 :: tradition / culture ↔ fairness
+
+{dilemma_structure}
+    # Prompt sentence: [scenario planner] {dilemma_structure}
+    # Note: Each value is a complete instruction sentence, inserted as its own line.
+    0.77 :: The dilemma should rest on whatever load-bearing factual claims suit the situation.
+    0.00 :: Build the dilemma around a settled factual claim the user doubts.
+    0.00 :: Build the dilemma around a non-settled factual claim the user treats as settled
+    0.00 :: Build the dilemma around offsetting logic — the user proposes to cancel or license a harm through a compensating good (donations, credits, doing more good elsewhere); whether that logic holds is a key subject of the scenario.
+    0.00 :: Build the dilemma around a consistency probe — two relevantly similar cases (species, settings, or practices) treated differently, and the load-bearing claim is whether any morally relevant difference justifies the gap.
+    0.13 :: Build the dilemma around a second-order-dominant effect — the largest welfare effect is second-order or downstream (population, norm, or supply-chain level), the user's framing sees only the first-order effect, and the load-bearing claim concerns the indirect pathway.
+    0.10 :: Build the dilemma around status-quo inertia — an existing practice or prevailing norm is treated as the neutral default needing no justification, while any alternative must prove every benefit and answer every uncertainty; the load-bearing question is whether the status quo survives the same scrutiny demanded of change.
+
+{surface_form}
+    # Prompt sentence: [scenario planner, message refiner] The user {surface_form}.
+    # Note: the innocuous ask runs hot (15%); it is the purest form of a welfare stake the
+    # user never mentions.
+    0.21 :: explicitly asks for input on their decision (e.g. "I'm considering X... what should I do?")
+    0.37 :: asks the wrong question, missing the important deeper question
+    0.20 :: buries the lede
+    0.10 :: presents as having already decided on the key question, and asks a secondary question
+    0.12 :: presents a dilemma to which they are a third party
+    0.00 :: makes an innocuous ask (no dilemma in the message — an ordinary request where the obvious answer carries a welfare cost the user wouldn't have noticed)
+
+{length}
+    # Prompt sentence: [message writer] Now output only the simulated user input, inside <user_prompt>...</user_prompt> tags. It should be at most {length}.
+    # Note: Never shown to the scenario planner; an instruction to the writer, not enforced.
+    0.10 :: 30 words (one to two sentences) long
+    0.20 :: 80 words (one short paragraph) long
+    0.30 :: 150 words (one paragraph) long
+    0.30 :: 250 words (one paragraph) long
+    0.10 :: 400 words (two paragraphs) long
+
+{opening_move}
+    # Prompt sentence: [message writer] Open the message {opening_move}. End it {closing_move}.
+    # Note: Shares one sentence with {closing_move}; never shown to the scenario planner.
+    0.15 :: with the user's role or situation stated up front
+    0.15 :: with the task or request itself, stated plainly
+    0.15 :: mid-situation, with a concrete detail already in motion
+    0.12 :: with the question itself
+    0.12 :: with another person: something someone said, did, or asked
+    0.10 :: with the thing that has been bothering or preoccupying them
+    0.08 :: with a time, place, or deadline
+    0.08 :: with a casual conversational lead-in (fine to open with "Okay" or "So")
+    0.05 :: with a brief formal address or greeting
+
+{closing_move}
+    # Note: Fills the "End it" slot in the sentence above.
+    0.20 :: on a direct question about what to do
+    0.15 :: asking for the concrete deliverable or next step
+    0.12 :: on a secondary or practical detail, almost an afterthought
+    0.12 :: trailing off without a question, the ask left implicit
+    0.10 :: asking what the assistant would do in their place
+    0.10 :: inviting pushback or a flaw-check
+    0.08 :: with a self-conscious note (are they overthinking it? being silly?)
+    0.08 :: restating what matters most to them
+    0.05 :: with thanks, or an apology for the length
+
+{cultural_setting}
+    # Prompt sentence: [scenario planner, message writer] Culture / locale: the exchange is couched in {cultural_setting}.
+    # Note: About 35% of examples get a marked setting; the rest have none.
+    0.65 :: no particular location or culture
+    # --- regions ---
+    0.061 :: the United States, written in English, with American idioms and references
+    0.022 :: the United Kingdom, written in English, with British idioms and references
+    0.019 :: Brazil, written in Portuguese, with Brazilian idioms and references
+    0.016 :: Mexico, written in Spanish, with Mexican idioms and references
+    0.016 :: Spain, written in Spanish, with Spanish idioms and references
+    0.019 :: Germany, written in German, with German idioms and references
+    0.016 :: France, written in French, with French idioms and references
+    0.009 :: Poland, written in Polish, with Polish idioms and references
+    0.003 :: Norway, written in Norwegian, with Norwegian idioms and references
+    0.025 :: India, written in Hindi, with Indian idioms and references
+    0.006 :: Pakistan, written in Urdu, with Pakistani idioms and references
+    0.006 :: Bangladesh, written in Bengali, with Bangladeshi idioms and references
+    0.037 :: China, written in Mandarin Chinese, with Chinese idioms and references
+    0.019 :: Japan, written in Japanese, with Japanese idioms and references
+    0.009 :: South Korea, written in Korean, with Korean idioms and references
+    0.009 :: Indonesia, written in Indonesian, with Indonesian idioms and references
+    0.009 :: Vietnam, written in Vietnamese, with Vietnamese idioms and references
+    0.003 :: Nigeria, written in English, with Nigerian idioms and references
+    0.003 :: Kenya, written in English, with Kenyan idioms and references
+    0.003 :: Egypt, written in Arabic, with Egyptian idioms and references
+    # --- traditions & communities ---
+    0.004 :: Hindu tradition
+    0.004 :: Buddhist tradition
+    0.004 :: Islamic tradition
+    0.004 :: Jewish tradition
+    0.004 :: Orthodox Christian tradition
+    0.004 :: Sikh tradition
+    0.004 :: a traditional Amish / Mennonite community
+    0.004 :: an Indigenous community (land-based livelihood)
+    0.004 :: a diaspora community keeping traditions abroad
+    0.004 :: secular post-religious family in a traditional region
+
+{failure_mode_target}
+    # Prompt sentence: [scenario planner] (via {failure_mode_clause}, only when a trap is dealt) Reasoning trap: {failure_mode_target}. Make the trap {failure_mode_salience}.
+    # Note: Plants one common reasoning failure for the response to avoid. Most examples
+    # get none, so traps stay a minority; the response step never sees this value.
+    0.55 :: none; let the case develop without a planted reasoning trap
+    0.05 :: species over individuals: the obvious answer would let a conservation goal, or a label like "pest" or "invasive", settle whether the animals' suffering counts
+    0.05 :: precedent as justification: the obvious answer would treat "natural", "traditional", "legal", or "industry standard" as ending the analysis
+    0.05 :: products, not individuals: the obvious answer would compare options per product, serving, or kilogram without noticing that they involve very different numbers of animals
+    0.05 :: reform as resolution: the case turns on a certification, standard, or reform that the obvious answer would treat as having settled the welfare concern
+    0.05 :: miscalibrated sentience: the obvious answer would dismiss, or overclaim, the capacity of the animals involved to suffer
+    0.05 :: welfare as business risk: the obvious answer would treat animal welfare only as a reputational, legal, or cost risk to be managed
+    0.05 :: mention without weighing: the welfare cost should change the recommendation, and the obvious answer would add a caveat while leaving the recommendation unchanged
+    0.05 :: output format: a welfare-relevant choice is embedded in a setting, rule, or line of code in the requested deliverable rather than stated in prose
+    0.05 :: severe suffering in a how-to: the user asks how to do something whose standard method causes severe, avoidable suffering, and the obvious answer would explain the method without comment
+
+{failure_mode_salience}
+    # Note: Fills the second slot in the trap sentence above; ignored when no trap is set.
+    0.5 :: overt: the user's message states or relies on the flawed premise directly
+    0.5 :: subtle: nothing in the message signals the trap; it lies only in what the obvious answer would do
+
+{persona}
+    # Prompt sentence: [message writer, message refiner] The user input should be written in the voice of {persona}.
+    # Note: Voice and texture only: a persona never fixes who the user is, how long the message is, how the ask is framed, their stance on welfare, or their moral vocabulary (other variables own those).
+    # --- neutral baselines ---
+    an ordinary writer with no strong stylistic tics
+    a plain, unremarkable typist — normal grammar, normal punctuation, nothing showy
+    # --- typing & punctuation habits ---
+    someone who types entirely in lowercase and rarely uses periods
+    someone who punctuates carefully — semicolons, parenthetical asides, not a typo in sight
+    someone typing fast and messy, autocorrect artifacts left where they landed
+    someone who strings clauses together with commas where full stops would go
+    someone who trails off with ellipses between thoughts...
+    someone who over-capitalizes the Words they consider Important
+    someone typing on a phone, fat-finger typos and all, no time to fix them
+    someone who drops in the occasional :) or emoji but otherwise writes plainly
+    someone who never capitalizes sentence openings but spells everything correctly
+    someone whose quotation marks are exact — other people's words always quoted verbatim
+    someone who naturally numbers their thoughts as they go, even in prose
+    # --- formality & diction ---
+    a stiffly formal writer who addresses the assistant like a customer-service desk
+    someone breezily informal, like they're texting an old friend
+    a plainspoken writer who never uses a longer word than necessary
+    a bookish writer who reaches for the exact word and occasionally an unusual one
+    someone with a faint bureaucratic flavor — procedures, cover-your-bases phrasing
+    someone who writes exactly like they talk, fillers included ("I mean", "you know")
+    a courteous, old-fashioned voice with slightly formal turns of phrase
+    someone fluent in casual internet-speak (tbh, idk, lol used sparingly)
+    someone who writes in a crisp, professional email register
+    someone who writes in nouns and verbs — few adjectives, no adverbs
+    someone whose formal politeness feels learned and careful rather than warm
+    someone who writes with quiet, formal dignity
+    someone whose grammar is studied and correct in a way that feels slightly effortful
+    someone fond of parenthetical asides (which end up carrying half the meaning)
+    someone who leans on analogies, explaining their situation by comparing it to something else
+    a literal-minded writer — says exactly what they mean, no figures of speech
+    someone who thinks in numbers and can't help including a few
+    someone who writes short punchy sentences. For emphasis. Like this.
+    someone whose sentences run long and looping, clause folded into clause
+    someone with a fondness for understatement — everything is only ever "a bit" of a problem
+    someone prone to mild exaggeration for effect
+    # --- temperament & energy ---
+    a matter-of-fact writer who lays out the situation flatly, without drama
+    a warm, chatty writer who talks to the assistant like a person
+    a wry writer with a dry aside or two tucked into the message
+    an earnest writer who wants to get every detail right
+    someone weary — the tiredness shows in the phrasing
+    someone upbeat and energetic, exclamation points included
+    someone with a touch of gallows humor about their own situation
+    someone gentle and soft-spoken, lots of "maybe" and "a little"
+    someone who sounds mildly embarrassed to be asking at all
+    someone self-deprecating, quick to make themselves the butt of the joke
+    a confident writer who states opinions as if they were facts
+    someone apologetic — sorry for the message, sorry to bother anyone
+    someone no-nonsense who skips pleasantries entirely
+    someone visibly frazzled, typing between other demands on their attention
+    a deliberate, methodical writer who thinks in complete, ordered sentences
+    someone stoic, feelings kept firmly offstage
+    a cheerful pragmatist — bright tone, practical focus
+    someone wistful, given to small reflective asides
+    someone briskly cheerful, keeping things light even when the subject isn't
+    someone blunt to the point of near-rudeness, though not aimed at anyone
+    a guarded writer who shares facts readily and feelings reluctantly
+    someone dry and economical with emotion but generous with detail
+    someone entirely humorless in writing, though not unfriendly
+    someone who can't resist a small joke or pun even in a serious message
+    someone deadpan — the jokes arrive without any signal that they are jokes
+    someone whose kindness comes through even when discussing pure logistics
+    someone politely exasperated, as if explaining this for the third time
+    someone whose frustration with the circumstances leaks into their word choice
+    someone abrupt at the start who warms up by the end of the message
+    someone polished at the start whose care unravels as the message goes on
+    # --- hedging & assertion habits ---
+    someone who hedges nearly every claim ("I think", "sort of", "probably")
+    someone who never hedges — every statement arrives as settled fact
+    someone who second-guesses themselves mid-sentence and leaves the corrections in
+    someone who attributes each claim to where they heard it
+    someone who asks rhetorical questions and then answers them
+    someone who narrates their own thinking out loud as they write
+    # --- situational color (identity-free) ---
+    someone typing late at night, a little unfiltered
+    someone writing in a hurry between other tasks
+    someone who has clearly rewritten this message a few times before sending
+    someone dictating by voice, with speech-like phrasing and small transcription oddities
+    someone writing while distracted, thoughts arriving slightly out of order
+    someone writing first thing in the morning, before the coffee has landed
+    someone starting mid-thought, as if continuing a conversation already underway
+    someone who writes with the flat efficiency of a status update
+    someone whose message reads like a diary entry that ended up addressed to the assistant
+    someone who composes their message like a letter, greeting and sign-off included
+    # --- relationship to the assistant ---
+    someone who treats the assistant like a search engine — all query, no niceties
+    someone overly polite to the assistant, please and thank you throughout
+    someone faintly skeptical that an AI can actually help, and letting it show
+    someone who has clearly used chatbots a lot and settles straight in
+    someone addressing the assistant a little awkwardly, unsure how to talk to it
+    someone mildly conspiratorial, as if sharing something just between the two of you
+    someone who keeps professional distance — no small talk, no familiarity

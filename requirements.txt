@@ -1,0 +1,7 @@
+# Python packages for the emergent misalignment prompt corpus contributor kit (Python 3.10 or newer).
+# No package here is used with an API key: every model call goes through the Claude Code command line tool.
+pyyaml>=6.0
+python-dotenv>=1.0
+tenacity>=8.2
+anthropic>=0.96.0  # imported by the pipeline's shared/api.py; never used to make a call in this kit
+claude-agent-sdk>=0.2.0  # drives the Claude Code command line tool (the wheel bundles a copy of it)
