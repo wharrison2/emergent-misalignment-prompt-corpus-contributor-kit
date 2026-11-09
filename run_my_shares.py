@@ -280,6 +280,19 @@ def print_dry_run(share: dict, output_folder: Path) -> None:
             raise SystemExit(f"Dry run failed for share {share['share_number']:03d}")
 
 
+def keep_computer_awake_while_this_run_lasts() -> str:
+    """On macOS, start `caffeinate` tied to this process, so the computer does not sleep while the run lasts (it stops by
+    itself when this process exits). It prevents idle sleep, and system sleep while on mains power; it cannot stop the sleep
+    that closing a laptop lid causes. Returns a message for the log."""
+    caffeinate = shutil.which("caffeinate") if sys.platform == "darwin" else None
+    if caffeinate is None:
+        return ("Note: this computer is not kept awake automatically (caffeinate is macOS only). Turn off sleep while "
+                "this runs. If it sleeps anyway, run the same command again to resume.")
+    subprocess.Popen([caffeinate, "-i", "-m", "-s", "-w", str(os.getpid())])
+    return ("Keeping this computer awake while the run lasts (caffeinate). Keep the lid open and the charger plugged in: "
+            "closing the lid still puts a laptop to sleep. If it sleeps anyway, run the same command again to resume.")
+
+
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--shares", required=True, help="comma-separated share numbers assigned to you, e.g. 7,12")
@@ -311,6 +324,7 @@ def main(argv=None) -> int:
     if not arguments.skip_login_check:
         print(check_claude_login(arguments.accept_other_login_method), flush=True)
 
+    print(keep_computer_awake_while_this_run_lasts(), flush=True)
     started = datetime.now()
     for share in shares:
         code = run_share(share, output_folder)

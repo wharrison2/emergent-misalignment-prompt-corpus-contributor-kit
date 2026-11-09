@@ -54,6 +54,10 @@ nohup python run_my_shares.py --shares 7,12 > run_my_shares_log.txt 2>&1 &
 log prints a progress line about every three minutes with the elapsed time. Watch it with `tail -f run_my_shares_log.txt`,
 or see which shares are finished with `python run_my_shares.py --shares 7,12 --status`.
 
+**Keep the computer awake.** On macOS the run keeps the computer awake by itself (`caffeinate`) until it ends, but closing a
+laptop's lid still puts it to sleep, so keep the lid open and the charger plugged in. On other systems, turn off sleep while
+it runs. If the computer sleeps or restarts anyway, run the same command again: it resumes from the last checkpoint.
+
 Your results are written to `my_share_corpora/contributor_corpus_share_NNN/` (one folder per share). Do not edit anything in
 there or in `contributor_shares/`.
 
