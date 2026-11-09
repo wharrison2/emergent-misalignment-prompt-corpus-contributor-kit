@@ -61,6 +61,34 @@ it runs. If the computer sleeps or restarts anyway, run the same command again: 
 Your results are written to `my_share_corpora/contributor_corpus_share_NNN/` (one folder per share). Do not edit anything in
 there or in `contributor_shares/`.
 
+## Second pass over a share
+
+A second pass deals the same specs of a share again, so each spec gets a second prompt with different dealt variables (the
+kind of person, the form of the message and so on; only the spec itself is the same). It must use a **distinct scenario seed**
+(so the dealt variables differ) and **its own output folder** (so the first pass is never touched). Do it only when asked.
+
+For one or more shares, use `--second-pass`. It uses each share's seed base plus 500 and writes to `second_pass_share_corpora/`:
+
+```
+python run_my_shares.py --shares 7,12 --second-pass --dry-run
+nohup python run_my_shares.py --shares 7,12 --second-pass > run_my_shares_second_pass_log.txt 2>&1 &
+```
+
+Because the deal changes with the seed, the run first simulates the deal offline (no model call) to find how many specs it can
+deal without running out of a category, prints that count (the dry run shows it too), and records it in
+`deal_count_found_by_offline_simulation.json` in each corpus folder. The usage limit, resume, `--status` and zip steps work as
+above (add `--second-pass` to every command, including `--status`).
+
+To choose the seed yourself, for exactly one share, give an explicit seed base and a new output folder (the run refuses a seed
+base that any first pass, standard second pass or the main corpus already used):
+
+```
+python run_my_shares.py --shares 7 --scenario-seed-base 20287700 --output-folder my_second_pass_corpora --dry-run
+```
+
+The zip is named `..._second_pass_shares_...` and is sent back like any other, but it is **not merged as a duplicate** of the
+first pass: it is kept separately.
+
 ## If the usage limit is reached
 
 The run stops cleanly with a message starting `STOPPED: your Claude usage limit was reached` and exit code 3. Wait until your

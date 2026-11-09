@@ -12,6 +12,11 @@ zips_to_send_back/ named with the share numbers and the date and time. Send that
 All model calls go through the Claude Code command line tool, billed to your Claude subscription. No API key is read or
 needed. If your usage limit is reached the run stops cleanly (exit code 3): wait for the limit to reset and rerun.
 
+Second pass: `--second-pass` deals the same specs again with a different scenario seed (the share's seed base plus 500) so each
+spec gets a second prompt with different non-spec dealt variables. It writes to its own folder (second_pass_share_corpora/ by
+default), never touching the first pass, and finds the share's safe deal count for the new seed by simulating the deal offline.
+`--scenario-seed-base N` does the same with an explicit seed base, for exactly one share, and needs its own --output-folder.
+
 --dry-run prints what would run for each share and creates nothing in your output folder. --status prints the state of
 each share. Neither makes a model call.
 """
@@ -20,6 +25,8 @@ import argparse
 import hashlib
 import json
 import os
+import random
+import shlex
 import shutil
 import subprocess
 import sys
@@ -33,6 +40,11 @@ BATCH_SCRIPT = KIT_ROOT / "scripts" / "emergent_misalignment" / "add_batch_to_em
 SHARE_FOLDER = KIT_ROOT / "contributor_shares"
 MANIFEST_PATTERN = "contributor_share_manifest_*.json"
 DEFAULT_OUTPUT_FOLDER = KIT_ROOT / "my_share_corpora"
+DEFAULT_SECOND_PASS_OUTPUT_FOLDER = KIT_ROOT / "second_pass_share_corpora"
+SECOND_PASS_SEED_BASE_OFFSET = 500
+BATCH_NUMBER_OF_EVERY_SHARE = 1  # one batch per share, so its scenario seed is the seed base plus 1
+MAIN_CORPUS_SEED_RANGE = range(20280001, 20281000)  # 20280001-20280999, the main corpus's batch seeds
+DEAL_COUNT_RECORD_FILE_NAME = "deal_count_found_by_offline_simulation.json"
 ZIP_FOLDER = KIT_ROOT / "zips_to_send_back"
 CORPUS_SETTINGS_FILE_NAME = "corpus_settings_scenario_seed_base_and_spec_set_file.json"
 LEDGER_FILE_NAME = "corpus_batch_ledger_started_2026-11-06.jsonl"
@@ -42,6 +54,8 @@ USAGE_LIMIT_EXIT_CODE = 3
 TIMESTAMP_FORMAT = "%Y-%m-%d_%H-%M"
 MINIMUM_PYTHON = (3, 10)
 SUBSCRIPTION_AUTH_METHOD = "claude.ai"
+
+SCRIPTS_FOLDER = KIT_ROOT / "scripts" / "emergent_misalignment"
 
 STATE_COMPLETE = "complete"
 STATE_UNFINISHED_BATCH = "unfinished_batch"
@@ -138,6 +152,120 @@ def state_of_share_corpus(corpus_folder: Path) -> tuple[str, Path | None]:
     return (STATE_UNFINISHED_BATCH, unfinished[0]) if unfinished else (STATE_NOT_STARTED, None)
 
 
+# ---------- seeds and the offline deal simulation (no model call) ----------
+
+def second_pass_seed_base(share: dict) -> int:
+    return share["scenario_seed_base"] + SECOND_PASS_SEED_BASE_OFFSET
+
+
+def refuse_seed_base_that_could_repeat_a_seed(seed_base: int, manifest: dict, is_standard_second_pass: bool = False) -> None:
+    """Exit with a message when the seed base, or the batch seed it gives, could repeat any seed used by the main corpus,
+    a first pass, or a standard second pass."""
+    batch_seed = seed_base + BATCH_NUMBER_OF_EVERY_SHARE
+    first_pass_bases = {share["scenario_seed_base"] for share in manifest["shares"]}
+    first_pass_batch_seeds = {share["first_batch_scenario_seed"] for share in manifest["shares"]}
+    standard_second_pass_bases = {base + SECOND_PASS_SEED_BASE_OFFSET for base in first_pass_bases}
+    standard_second_pass_batch_seeds = {base + BATCH_NUMBER_OF_EVERY_SHARE for base in standard_second_pass_bases}
+    reasons = []
+    if seed_base in first_pass_bases:
+        reasons.append("it is a share's first-pass seed base")
+    if batch_seed in first_pass_batch_seeds:
+        reasons.append("its batch seed is a share's first-pass batch seed")
+    if not is_standard_second_pass and (seed_base in standard_second_pass_bases or batch_seed in standard_second_pass_batch_seeds):
+        reasons.append("it is the seed of a standard --second-pass")
+    if seed_base in MAIN_CORPUS_SEED_RANGE or batch_seed in MAIN_CORPUS_SEED_RANGE:
+        reasons.append(f"it is in the main corpus's seed range {MAIN_CORPUS_SEED_RANGE[0]}-{MAIN_CORPUS_SEED_RANGE[-1]}")
+    if reasons:
+        raise SystemExit(f"Scenario seed base {seed_base} is refused: {'; '.join(reasons)}. Pick a seed base whose seed "
+                         f"({seed_base} + {BATCH_NUMBER_OF_EVERY_SHARE}) nothing else has used.")
+
+
+def load_scenario_dealer_module():
+    if str(SCRIPTS_FOLDER) not in sys.path:
+        sys.path.insert(0, str(SCRIPTS_FOLDER))
+    from load_pipeline_scenario_dealer import load_scenario_dealer
+    return load_scenario_dealer()
+
+
+def simulate_deal_of_specs(spec_set_path: Path, deal_count: int, scenario_seed: int) -> list[str]:
+    """The spec ids the real scenario dealer deals for this spec set, count and seed (nothing dealt before). Raises the
+    dealer's SpecPoolExhausted when a dealt category has no spec left."""
+    compose_scenarios = load_scenario_dealer_module()
+    scenarios = compose_scenarios.deal_scenarios(deal_count, random.Random(scenario_seed),
+                                                 compose_scenarios.DEFAULT_VARIABLES, Path(spec_set_path), None)
+    return [scenario["spec_id"] for scenario in scenarios]
+
+
+def find_largest_safe_deal_count(spec_set_path: Path, share_size: int, scenario_seed: int) -> tuple[int, str | None]:
+    """(largest count up to share_size that deals without exhausting a category, the category that exhausted at
+    share_size or None when the whole share can be dealt). Searched downwards because the deal changes with the count."""
+    compose_scenarios = load_scenario_dealer_module()
+    exhausted_category_at_full_size = None
+    for deal_count in range(share_size, 0, -1):
+        try:
+            simulate_deal_of_specs(spec_set_path, deal_count, scenario_seed)
+            return deal_count, exhausted_category_at_full_size
+        except compose_scenarios.SpecPoolExhausted as error:
+            if deal_count == share_size:
+                exhausted_category_at_full_size = error.category
+    raise SystemExit(f"No deal count from 1 to {share_size} is safe for scenario seed {scenario_seed}.")
+
+
+def share_as_dealt_with_seed_base(share: dict, seed_base: int, share_folder: Path | None = None) -> dict:
+    """The share with the given scenario seed base. At its own manifest seed base the manifest's safe deal count stands;
+    at any other, the safe deal count is found by simulating the deal offline at the new seed."""
+    if seed_base == share["scenario_seed_base"]:
+        return share
+    share_file = verified_share_file(share, share_folder or SHARE_FOLDER)
+    batch_seed = seed_base + BATCH_NUMBER_OF_EVERY_SHARE
+    safe_count, exhausted_category = find_largest_safe_deal_count(share_file, share["spec_count"], batch_seed)
+    dealt_ids = simulate_deal_of_specs(share_file, safe_count, batch_seed)
+    if not set(dealt_ids) <= set(share["spec_ids"]):
+        raise SystemExit(f"The simulated deal for share {share['share_number']} would deal specs outside the share.")
+    return dict(share, scenario_seed_base=seed_base, first_batch_scenario_seed=batch_seed, safe_deal_count=safe_count,
+                category_exhausted_when_dealing_the_whole_share=exhausted_category,
+                specs_unused_at_safe_deal_count=share["spec_count"] - safe_count, is_second_pass=True)
+
+
+def record_deal_count(corpus_folder: Path, share: dict) -> None:
+    """Keep next to the corpus the seed and deal count this run used (informational; the settings file is the check)."""
+    Path(corpus_folder).mkdir(parents=True, exist_ok=True)
+    (Path(corpus_folder) / DEAL_COUNT_RECORD_FILE_NAME).write_text(json.dumps({
+        "share_number": share["share_number"], "scenario_seed_base": share["scenario_seed_base"],
+        "batch_scenario_seed": share["scenario_seed_base"] + BATCH_NUMBER_OF_EVERY_SHARE,
+        "deal_count_used": share["safe_deal_count"], "specs_in_share": share["spec_count"],
+        "category_exhausted_when_dealing_the_whole_share": share.get("category_exhausted_when_dealing_the_whole_share"),
+        "recorded_at": datetime.now().isoformat(timespec="seconds")}, indent=2), encoding="utf-8")
+
+
+def choose_seed_bases_and_output_folder(arguments, shares: list[dict], manifest: dict) -> tuple[list[dict], Path, str]:
+    """Apply --second-pass / --scenario-seed-base with all the refusals, before anything is created. Returns the shares as
+    they will be dealt, the output folder, and a label for the zip name ('' for a first pass)."""
+    if arguments.second_pass and arguments.scenario_seed_base is not None:
+        raise SystemExit("Use either --second-pass or --scenario-seed-base, not both.")
+    if arguments.scenario_seed_base is None and not arguments.second_pass:
+        return shares, (arguments.output_folder or DEFAULT_OUTPUT_FOLDER).resolve(), ""
+    if arguments.scenario_seed_base is not None:
+        if len(shares) != 1:
+            raise SystemExit("--scenario-seed-base is an absolute seed base, so it needs exactly one share in --shares. "
+                             "For several shares use --second-pass.")
+        if arguments.output_folder is None:
+            raise SystemExit("--scenario-seed-base needs its own --output-folder (for example --output-folder "
+                             "my_second_pass_corpora), so a pass with another seed never lands in my_share_corpora/.")
+        seed_bases = [arguments.scenario_seed_base]
+    else:
+        seed_bases = [second_pass_seed_base(share) for share in shares]
+    output_folder = (arguments.output_folder or DEFAULT_SECOND_PASS_OUTPUT_FOLDER).resolve()
+    if output_folder == DEFAULT_OUTPUT_FOLDER.resolve() and any(base != share["scenario_seed_base"]
+                                                                for base, share in zip(seed_bases, shares)):
+        raise SystemExit(f"A second pass must write to its own output folder, not {DEFAULT_OUTPUT_FOLDER.name}/ (that "
+                         f"holds the first pass). Leave --output-folder out with --second-pass, or name a new folder.")
+    for seed_base in seed_bases:
+        refuse_seed_base_that_could_repeat_a_seed(seed_base, manifest, is_standard_second_pass=arguments.second_pass)
+    return ([share_as_dealt_with_seed_base(share, base) for share, base in zip(shares, seed_bases)], output_folder,
+            "second_pass_")
+
+
 def batch_command(corpus_folder: Path, share: dict, unfinished_batch_folder: Path | None) -> list[str]:
     command = [sys.executable, str(BATCH_SCRIPT), "--corpus-folder", str(corpus_folder),
                "--deals", str(share["safe_deal_count"])]
@@ -226,10 +354,10 @@ def take_lock(corpus_folder: Path) -> Path:
 
 
 def write_zip_of_share_corpora(share_numbers: list[int], output_folder: Path, zip_folder: Path = ZIP_FOLDER,
-                               now=datetime.now) -> Path:
+                               now=datetime.now, label: str = "") -> Path:
     zip_folder.mkdir(parents=True, exist_ok=True)
     share_text = "_".join(f"{number:03d}" for number in sorted(share_numbers))
-    zip_path = zip_folder / (f"emergent_misalignment_contributor_corpus_shares_{share_text}_"
+    zip_path = zip_folder / (f"emergent_misalignment_contributor_corpus_{label}shares_{share_text}_"
                              f"{now().strftime(TIMESTAMP_FORMAT)}.zip")
     with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as archive:
         for number in sorted(share_numbers):
@@ -251,6 +379,9 @@ def run_share(share: dict, output_folder: Path) -> int:
     if state == STATE_COMPLETE:
         print(f"Share {number:03d}: already complete, skipping.", flush=True)
         return 0
+    record_deal_count(corpus_folder, share)
+    print(f"Share {number:03d}: scenario seed base {share['scenario_seed_base']}, deal count {share['safe_deal_count']} of "
+          f"{share['spec_count']} specs.", flush=True)
     lock_path = take_lock(corpus_folder)
     try:
         action = f"resuming {relative_to_kit(unfinished)}" if unfinished else f"starting a batch of {share['safe_deal_count']} specs"
@@ -264,8 +395,10 @@ def print_dry_run(share: dict, output_folder: Path) -> None:
     """Show the batch script's own dry run for the share, in a throwaway corpus folder, so nothing is created in yours."""
     corpus_folder = corpus_folder_for_share(share["share_number"], output_folder)
     state = state_of_share_corpus(corpus_folder) if corpus_folder.exists() else (STATE_NOT_STARTED, None)
+    pass_note = ", second pass: deal count found by offline simulation at this seed" if share.get("is_second_pass") else ""
     print(f"\n=== Share {share['share_number']:03d} ({share['spec_count']} specs, safe deal count {share['safe_deal_count']}, "
-          f"scenario seed base {share['scenario_seed_base']}): current state {state[0]} ===", flush=True)
+          f"scenario seed base {share['scenario_seed_base']}, batch seed {share['scenario_seed_base'] + BATCH_NUMBER_OF_EVERY_SHARE}"
+          f"{pass_note}): current state {state[0]} ===", flush=True)
     if state[0] == STATE_COMPLETE:
         print("Already complete; a real run would skip it.")
         return
@@ -296,7 +429,12 @@ def keep_computer_awake_while_this_run_lasts() -> str:
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--shares", required=True, help="comma-separated share numbers assigned to you, e.g. 7,12")
-    parser.add_argument("--output-folder", type=Path, default=DEFAULT_OUTPUT_FOLDER)
+    parser.add_argument("--output-folder", type=Path, default=None,
+                        help=f"default {DEFAULT_OUTPUT_FOLDER.name}/, or {DEFAULT_SECOND_PASS_OUTPUT_FOLDER.name}/ with --second-pass")
+    parser.add_argument("--second-pass", action="store_true",
+                        help="deal the same specs again with each share's seed base plus 500, into its own output folder")
+    parser.add_argument("--scenario-seed-base", type=int, default=None,
+                        help="explicit scenario seed base for exactly one share (needs its own --output-folder)")
     parser.add_argument("--dry-run", action="store_true", help="show the plan for each share; create nothing")
     parser.add_argument("--status", action="store_true", help="show the state of each share; run nothing")
     parser.add_argument("--accept-other-login-method", action="store_true")
@@ -308,7 +446,7 @@ def main(argv=None) -> int:
     shares = [find_share(manifest, number) for number in share_numbers]
     for share in shares:
         verified_share_file(share)
-    output_folder = arguments.output_folder.resolve()
+    shares, output_folder, zip_label = choose_seed_bases_and_output_folder(arguments, shares, manifest)
 
     if arguments.status:
         for share in shares:
@@ -326,12 +464,13 @@ def main(argv=None) -> int:
 
     print(keep_computer_awake_while_this_run_lasts(), flush=True)
     started = datetime.now()
+    rerun_command = "python run_my_shares.py " + " ".join(shlex.quote(part) for part in (argv if argv is not None else sys.argv[1:]))
     for share in shares:
         code = run_share(share, output_folder)
         if code == USAGE_LIMIT_EXIT_CODE:
             print(f"\nSTOPPED: your Claude usage limit was reached while working on share {share['share_number']:03d}. "
                   f"Nothing is lost. Wait for the limit to reset (the message above or Claude Code's /usage may say when), "
-                  f"then run the same command again:\n    python run_my_shares.py --shares {arguments.shares}", flush=True)
+                  f"then run the same command again:\n    {rerun_command}", flush=True)
             return USAGE_LIMIT_EXIT_CODE
         if code != 0:
             print(f"\nSTOPPED: the batch for share {share['share_number']:03d} failed (exit code {code}); the message above "
@@ -339,7 +478,7 @@ def main(argv=None) -> int:
                   f"/batches/ say why. Run the same command again to resume; if it fails again, send those files to the person "
                   f"who sent you the kit.", flush=True)
             return code
-    zip_path = write_zip_of_share_corpora(share_numbers, output_folder)
+    zip_path = write_zip_of_share_corpora(share_numbers, output_folder, label=zip_label)
     print(f"\nALL DONE in {(datetime.now() - started).total_seconds() / 60:.0f} minutes this session. "
           f"Send this file back: {relative_to_kit(zip_path)}", flush=True)
     return 0

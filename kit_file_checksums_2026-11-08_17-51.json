@@ -1,7 +1,7 @@
 {
-  ".gitignore": "333ac4dacc30d9e598c33d99bdd0338548e470cd35399225fa2d28ee66778407",
+  ".gitignore": "9cff5a1e7628530466827d02834fe5bbdf276b2dc498c1e04b5ed2757c625de0",
   "CLAUDE.md": "756ccb38916831bb76e8337729165bac45248bc448ae0c4ba1cf7ecee4ad4316",
-  "README.md": "8d2d9a4b2c6c84c4110db4b548e80ea10c2376037b1062d48aa0bcc3e4f2cd82",
+  "README.md": "87556be7df24ee1fb18212a880b5e28985f2c8a814354eae936dd5832633b97d",
   "contributor_shares/contributor_share_001_of_020_200_specs_2026-11-08_15-35.jsonl": "18a3241780e908f0edd5755cae5c5df91b040405d2f365e1a4b158533306f71f",
   "contributor_shares/contributor_share_002_of_020_200_specs_2026-11-08_15-35.jsonl": "e1e16ef92e7daa7e17ae4e8805c0bf9d7c36bb49a010728be71da2ec6718b40b",
   "contributor_shares/contributor_share_003_of_020_200_specs_2026-11-08_15-35.jsonl": "99a8325a4eb403fd62a9faf6eeca846fae14bcceafa0be0da80cc851a1968c12",
@@ -24,7 +24,7 @@
   "contributor_shares/contributor_share_020_of_020_199_specs_2026-11-08_15-35.jsonl": "a405b72c5cd651cb3b785662f4f8801d2f515e0d6c993555ff07e589d700b987",
   "contributor_shares/contributor_share_manifest_2026-11-08_15-35.json": "73d17deb2902268b5e1cd07b2f0b6e121b88ca313aaaca43353168f251f36c83",
   "requirements.txt": "8224909dc6352349332dda0a702a296961fc440782cb6c0876161d6dbc64c3cb",
-  "run_my_shares.py": "40ac05ce0432d9b654720b7b82830804019117c5edcad60dd3f173dec6edab1a",
+  "run_my_shares.py": "acff7af8878b5055177a68919b902d7c065ca41f6d23f94090c060992f29a878",
   "scripts/emergent_misalignment/add_batch_to_emergent_misalignment_prompt_corpus.py": "62ff7272c4c0dc01eaa3356245ab82205b4f902a487694770877df726f68ba1d",
   "scripts/emergent_misalignment/claude_code_cli_structured_reply_without_paid_api_fallback.py": "c95578fff5eff0850543daf277ce507a85a51a377b6cd9321e4f30d4740378d9",
   "scripts/emergent_misalignment/filter_prompts_where_user_never_mentions_animal_welfare_with_haiku_through_claude_code_cli.py": "79922ea806131d9fef4fe1e7bfb674457b1b17f6ecefc329b0eb596d77d8c485",
