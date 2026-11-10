@@ -4,6 +4,7 @@ second_pass_share_corpora/
 *_share_corpora*/
 run_my_shares*_log.txt
 zips_to_send_back/
+scenario_seeds_already_started_in_this_kit.json
 .venv/
 __pycache__/
 *.pyc

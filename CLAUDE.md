@@ -24,3 +24,6 @@ shares to completion in the background, and tell them where the zip is.
 - Never run two copies of the command for the same share at once. The run refuses (it keeps a lock file); do not try to bypass it.
 - When the log prints `ALL DONE`, report the zip path it printed (under `zips_to_send_back/`) and remind the contributor to
   send that file to whoever sent them the kit.
+- If the run says a share was already run (exit code 4, or a refusal naming a seed already started), do not move, rename or
+  delete any folder or record file to get around it. Run the contributor's next incomplete share instead, and start a
+  `--second-pass` only if the contributor asks and all their assigned shares have been run once.
