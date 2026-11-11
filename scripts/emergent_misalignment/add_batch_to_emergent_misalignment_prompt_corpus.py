@@ -51,6 +51,7 @@ from windows_extended_length_paths import (  # noqa: E402
 from spec_outcomes_and_status_table_for_prompt_corpus import (  # noqa: E402
     ANSWERABILITY_VERDICT_PATTERN, FAILURE_STAGES, LEDGER_FILE_NAME, USEFULNESS_VERDICT_PATTERN,
     build_spec_status_table, find_pipeline_run_folder, newest_file, ok_verdicts_in_folder, outcome_counts,
+    prompt_ids_with_no_verdict_record_in_folder,
     write_batch_spec_outcomes_file, write_spec_status_table)
 
 # This repository's own virtual environment when it exists; otherwise (the contributor kit, or any other checkout) the
@@ -59,7 +60,7 @@ _REPOSITORY_VIRTUAL_ENVIRONMENT_PYTHON = REPOSITORY_ROOT / "animal-welfare-data-
 PYTHON_EXECUTABLE = (str(_REPOSITORY_VIRTUAL_ENVIRONMENT_PYTHON) if _REPOSITORY_VIRTUAL_ENVIRONMENT_PYTHON.exists()
                      else sys.executable)
 USAGE_LIMIT_EXIT_CODE = 3  # the judges exit with this when the subscription usage limit stops them
-USAGE_LIMIT_TEXT_MARKERS = ("usage limit", "spend limit")  # in a step's terminal output: the pipeline's usage-limit error
+USAGE_LIMIT_TEXT_MARKERS = ("usage limit", "spend limit", "hit your limit")  # in a step's terminal output: the pipeline's usage-limit error
 DEFAULT_CORPUS_FOLDER = (REPOSITORY_ROOT / "data"
                          / "emergent_misalignment_prompt_corpus_category_subcategory_harm_and_advantage_specs")
 CORPUS_SETTINGS_FILE_NAME = "corpus_settings_scenario_seed_base_and_spec_set_file.json"
@@ -548,6 +549,22 @@ def run_batch(corpus_folder: Path, batch_folder: Path, batch_number: int, scenar
                                             ("usefulness_judge", USEFULNESS_JUDGE_SCRIPT, "usefulness_judge")):
         for run_number in (1, 2):
             run_step(f"{judge_name}_run_{run_number}", judge_command(script, prompts_file, batch_folder / folder_name))
+
+    prompt_ids = [record["prompt_gid"] for record in prompt_records]
+    judges_with_missing_verdicts = []
+    for judge_name, folder_name, pattern, step_prefix in (
+            ("answerability judge", "answerability_judge", ANSWERABILITY_VERDICT_PATTERN, "answerability_judge"),
+            ("usefulness judge", "usefulness_judge", USEFULNESS_VERDICT_PATTERN, "usefulness_judge")):
+        missing_prompt_ids = prompt_ids_with_no_verdict_record_in_folder(batch_folder / folder_name, pattern, prompt_ids)
+        if missing_prompt_ids:
+            judges_with_missing_verdicts.append(f"{judge_name}: {len(missing_prompt_ids)} of {len(prompt_ids)} prompts")
+            # forget that this judge's runs finished, so the resume runs it again (it skips prompts that already have verdicts)
+            for marker_file in (batch_folder / "step_completion_markers").glob(f"{step_prefix}_run_*_completed_*.json"):
+                marker_file.unlink()
+    if judges_with_missing_verdicts:
+        raise BatchFailure("judge calls failed for some prompts, so they have no verdict at all (" +
+                           "; ".join(judges_with_missing_verdicts) + "). Nothing was written to the accepted file, "
+                           "summary or ledger. Run the same command again to resume and judge them.")
 
     report("building accepted prompts")
     snapshot_folder = batch_folder / "generation_and_judge_prompts_used_for_this_batch"

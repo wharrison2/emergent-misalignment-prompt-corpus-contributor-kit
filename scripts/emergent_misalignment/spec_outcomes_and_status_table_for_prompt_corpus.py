@@ -67,6 +67,14 @@ def ok_verdicts_in_folder(judge_folder: Path, pattern: str) -> dict[str, dict]:
     return {gid: record for gid, record in latest.items() if record.get("parse_status") == "ok"}
 
 
+def prompt_ids_with_no_verdict_record_in_folder(judge_folder: Path, pattern: str, prompt_ids: list[str]) -> list[str]:
+    """Prompt ids with no verdict record of any parse status: the judge's call failed every time for them.
+    A record whose parse_status is not ok (unparseable) still counts as a verdict here."""
+    files = sorted(Path(judge_folder).glob(pattern)) if Path(judge_folder).exists() else []
+    judged = latest_verdict_per_prompt(read_verdict_records(files)) if files else {}
+    return [prompt_id for prompt_id in prompt_ids if prompt_id not in judged]
+
+
 def derive_spec_outcomes_for_batch(batch_folder: Path, batch_number: int,
                                    spec_attempt_numbers: dict[str, int] | None = None) -> list[dict]:
     """One row per dealt spec of a finished batch, from the batch folder's own files (see the module docstring)."""
