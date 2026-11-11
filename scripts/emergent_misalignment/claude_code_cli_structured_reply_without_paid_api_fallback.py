@@ -35,7 +35,7 @@ class ClaudeCodeReply:
 
 
 NEUTRAL_SYSTEM_PROMPT = "You are a careful evaluator. Follow the instructions in the user message exactly."
-USAGE_LIMIT_MARKERS = ("usage limit", "rate limit", "limit reached", "limit will reset", "hit your limit")
+USAGE_LIMIT_MARKERS = ("usage limit", "rate limit", "limit reached", "limit will reset", "hit your limit", "limit · resets")
 
 
 def build_judge_options(model: str, json_schema: dict, shut_out_claude_ai_connectors: bool = True):

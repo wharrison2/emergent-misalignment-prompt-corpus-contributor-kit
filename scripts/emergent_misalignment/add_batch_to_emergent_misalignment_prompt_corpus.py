@@ -60,7 +60,7 @@ _REPOSITORY_VIRTUAL_ENVIRONMENT_PYTHON = REPOSITORY_ROOT / "animal-welfare-data-
 PYTHON_EXECUTABLE = (str(_REPOSITORY_VIRTUAL_ENVIRONMENT_PYTHON) if _REPOSITORY_VIRTUAL_ENVIRONMENT_PYTHON.exists()
                      else sys.executable)
 USAGE_LIMIT_EXIT_CODE = 3  # the judges exit with this when the subscription usage limit stops them
-USAGE_LIMIT_TEXT_MARKERS = ("usage limit", "spend limit", "hit your limit")  # in a step's terminal output: the pipeline's usage-limit error
+USAGE_LIMIT_TEXT_MARKERS = ("usage limit", "spend limit", "hit your limit", "limit · resets")  # in a step's terminal output: the pipeline's usage-limit error
 DEFAULT_CORPUS_FOLDER = (REPOSITORY_ROOT / "data"
                          / "emergent_misalignment_prompt_corpus_category_subcategory_harm_and_advantage_specs")
 CORPUS_SETTINGS_FILE_NAME = "corpus_settings_scenario_seed_base_and_spec_set_file.json"
