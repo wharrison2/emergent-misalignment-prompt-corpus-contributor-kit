@@ -738,6 +738,23 @@ def run(config: dict, prompts_dir: Path, output_dir: Path) -> list[dict]:
                                              "model": model,
                                              "recovered_unclosed": True})
                             return description, None, failures, model
+                    if api.looks_like_in_text_refusal(raw):
+                        # claude_code delivers a safety-classifier stop as an
+                        # ordinary end_turn reply with no tags. Treat it exactly
+                        # like a ModelSafeguardRefusal: deterministic, so grant
+                        # the fallback model one attempt if configured and not
+                        # yet used; otherwise the main loop rejects the deal.
+                        failures.append({"scenario_id": deal["scenario_id"],
+                                         "attempt": attempt, "raw": raw,
+                                         "stop_reason": stop_reason,
+                                         "model": model,
+                                         "safeguard_refusal": raw,
+                                         "in_text_refusal": True})
+                        if refusal_fallback_model and not use_fallback:
+                            refused = True
+                            attempts_allowed = attempt + 1
+                            continue
+                        return None, None, failures, None
                     failures.append({"scenario_id": deal["scenario_id"],
                                      "attempt": attempt, "raw": raw,
                                      "stop_reason": stop_reason, "model": model})
@@ -755,13 +772,20 @@ def run(config: dict, prompts_dir: Path, output_dir: Path) -> list[dict]:
                     print(f"    {deal['scenario_id']}: accepted unclosed "
                           "<scenario_description> (end_turn) — raw kept in "
                           "scenario_plan_failures.jsonl")
-                safeguard_refusals = [f for f in failures if f.get("safeguard_refusal")]
+                # A deal whose failures include a refusal of any kind (safeguard
+                # exception, in-text refusal, or stop_reason "refusal") is a
+                # rejection, never an unusable plan that halts the batch.
+                safeguard_refusals = [
+                    f for f in failures
+                    if f.get("safeguard_refusal") or f.get("stop_reason") == "refusal"]
                 if (safeguard_refusals and incoherent_raw is None and description is None):
                     # The stage model (and the fallback, if any) were refused by
                     # the model's safeguards: reject this one scenario, run goes on.
                     reject = {**deal, "reason": REFUSED_BY_MODEL_SAFEGUARDS,
                               "stage": "1a_scenario_plan",
-                              "error": safeguard_refusals[-1]["safeguard_refusal"]}
+                              "error": (safeguard_refusals[-1].get("safeguard_refusal")
+                                        or safeguard_refusals[-1].get("raw")
+                                        or "stop_reason refusal")}
                     rejects.append(reject)
                     utils.append_jsonl(reject, rejects_path)
                     print(f"    {deal['scenario_id']}: refused by the model's safeguards at "

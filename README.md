@@ -17,7 +17,8 @@ Run only the shares assigned to you.
 
 | Shares | Assigned to |
 |---|---|
-| 1–6 | A |
+| 1 | A |
+| 2–6 | D |
 | 7–9 | B |
 | 10–20 | C |
 
@@ -59,6 +60,9 @@ it runs. If the computer sleeps or restarts anyway, run the same command again: 
 
 Your results are written to `my_share_corpora/contributor_corpus_share_NNN/` (one folder per share). Do not edit anything in
 there or in `contributor_shares/`.
+
+If the model refuses a scenario while planning it, that scenario is now rejected automatically and the batch carries on. Do not add
+rejection records by hand.
 
 ## Second pass over a share
 

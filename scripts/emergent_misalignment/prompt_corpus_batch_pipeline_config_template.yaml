@@ -44,7 +44,8 @@ sdf:
 dad:
   profile: animal
   scenario_model: claude-sonnet-5-5
-  scenario_refusal_fallback_model: claude-sonnet-5-5
+  # The fallback must differ from scenario_model, or a refused plan is retried on the same model.
+  scenario_refusal_fallback_model: claude-opus-4-8
   prompt_draft_model: claude-sonnet-5-5
   prompt_gate_model: claude-sonnet-5-5
   prompt_refine_model: claude-sonnet-5-5

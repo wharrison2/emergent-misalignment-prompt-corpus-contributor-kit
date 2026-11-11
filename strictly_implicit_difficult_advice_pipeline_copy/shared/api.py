@@ -115,6 +115,36 @@ _REFUSAL_PATTERN = re.compile(r"usage policy|unable to respond to this request",
 # content, so it is never retried and never demotes the backend.
 _SAFEGUARD_REFUSAL_PATTERN = re.compile(r"safeguards flagged", re.IGNORECASE)
 
+# The claude_code backend delivers a safety-classifier stop as an ORDINARY reply:
+# stop_reason "end_turn", no output tags, and prose that declines (observed:
+# "I won't redo that scenario... The earlier response was stopped by a safety
+# classifier..."). Neither ModelSafeguardRefusal nor stop_reason "refusal" fires,
+# so callers must recognise it from the text. The phrases are the refusal
+# wordings seen so far; the apostrophe may be straight or curly.
+IN_TEXT_REFUSAL_PATTERN = re.compile(
+    r"safety classifier|I won['\u2019]t|I can['\u2019]t help|even reworded"
+    r"|won['\u2019]t reproduce|won['\u2019]t write|not able to"
+    r"|I['\u2019]m not going to|even in different words|response was stopped",
+    re.IGNORECASE)
+# Real outputs (scenario plans) are long prose about animals and businesses that
+# can contain "not able to" innocently, so the pattern is applied only to short
+# replies. Measured on contributor share 016: its 14 refusals were 226-452
+# characters, its 196 accepted plans 1,274 characters or longer (median about
+# 1,500), and a plan can quote its user ("I won't miss the covenant").
+IN_TEXT_REFUSAL_MAXIMUM_CHARACTERS = 800
+
+
+def looks_like_in_text_refusal(text: str | None) -> bool:
+    """True when a reply is a short, tagless prose refusal (see
+    IN_TEXT_REFUSAL_PATTERN). A reply containing an opening
+    <scenario_description tag is never a refusal; callers should still only ask
+    this about replies from which no description could be extracted."""
+    if not text or len(text) > IN_TEXT_REFUSAL_MAXIMUM_CHARACTERS:
+        return False
+    if "<scenario_description" in text:
+        return False
+    return bool(IN_TEXT_REFUSAL_PATTERN.search(text))
+
 # Claude Code treats an empty --system-prompt as unset and substitutes its own
 # agentic CLI prompt, which leaks tool/codebase behavior into generated text.
 # Stages that send no system prompt get this neutral stand-in instead. Note this
