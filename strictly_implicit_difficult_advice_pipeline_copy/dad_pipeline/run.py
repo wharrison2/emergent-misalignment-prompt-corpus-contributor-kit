@@ -103,6 +103,8 @@ def main() -> None:
     if args.stop_after < args.step:
         parser.error(f"--stop-after {args.stop_after} is before --step {args.step} — nothing would run.")
 
+    # Windows extended-length paths (a no-op elsewhere): a batch's run directory can be deeper than 259 characters.
+    args.config = utils.extended_length_path(args.config)
     config = utils.load_config(args.config)
 
     root = Path(__file__).parent.parent
@@ -110,7 +112,7 @@ def main() -> None:
     # folder, the principles file and where runs live; the code is shared.
     profile = profiles.use(profiles.name_from_config(config))
     # PIPELINE_OUTPUT_ROOT redirects all run output (used by the test suite)
-    outputs_root = Path(os.environ.get("PIPELINE_OUTPUT_ROOT", root / "outputs"))
+    outputs_root = utils.extended_length_path(Path(os.environ.get("PIPELINE_OUTPUT_ROOT", root / "outputs")))
     runs_root = outputs_root / profile.OUTPUT_SUBDIR / "runs"
 
     if args.resume:

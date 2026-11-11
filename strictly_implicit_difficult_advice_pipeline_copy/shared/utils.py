@@ -47,6 +47,23 @@ def repo_relative(path: str | Path) -> str:
         return resolved.name
 
 
+def extended_length_path(path: str | Path | None) -> str | Path | None:
+    """On Windows, the path in extended-length form (`\\\\?\\D:\\...`, or `\\\\?\\UNC\\...` for a network share), which
+    is not limited to 259 characters whatever the LongPathsEnabled setting is. Everywhere else, and for None, the argument
+    is returned unchanged. Call it on a path a process is handed (an environment variable or a config value) after any
+    resolve(), which can drop the prefix; paths built from the result with `/` keep it. The contributor kit's
+    scripts/emergent_misalignment/windows_extended_length_paths.py does the same for the kit's own scripts."""
+    if path is None or os.name != "nt":
+        return path
+    text = str(path)
+    if text.startswith("\\\\?\\") or text.startswith("\\\\.\\"):
+        return Path(text)
+    normalised = os.path.normpath(os.path.abspath(text))
+    if normalised.startswith("\\\\"):
+        return Path("\\\\?\\UNC\\" + normalised[2:])
+    return Path("\\\\?\\" + normalised)
+
+
 def ensure_dir(path: str | Path) -> Path:
     p = Path(path)
     p.mkdir(parents=True, exist_ok=True)
@@ -503,19 +520,23 @@ def _update_latest_symlink(parent: Path, run_dir: Path) -> None:
     privilege required), and failing that warn and continue — the pointer is a
     convenience; resolve_run_dir orders runs by directory name, not this link."""
     link = parent / "latest"
-    # lexists also catches broken symlinks and junctions, which exists() misses.
-    if os.path.lexists(link):
-        link.unlink()
+    # Never let this convenience crash a run: on Windows with extended-length (\\\\?\\) paths, which the run
+    # directory can have, the link calls may refuse the path or the junction tool may not accept the prefix.
     try:
+        # lexists also catches broken symlinks and junctions, which exists() misses.
+        if os.path.lexists(link):
+            link.unlink()
         link.symlink_to(run_dir.relative_to(parent), target_is_directory=True)
-    except OSError:
+    except (OSError, ValueError):
         try:
-            # Junction targets must be absolute; mklink is a cmd builtin.
+            # Junction targets must be absolute; mklink is a cmd builtin and does not take the extended-length prefix.
+            plain_link = str(link).removeprefix("\\\\?\\")
+            plain_target = str(run_dir.resolve()).removeprefix("\\\\?\\")
             subprocess.run(
-                ["cmd", "/c", "mklink", "/J", str(link), str(run_dir.resolve())],
+                ["cmd", "/c", "mklink", "/J", plain_link, plain_target],
                 check=True, capture_output=True,
             )
-        except (OSError, subprocess.CalledProcessError):
+        except (OSError, ValueError, subprocess.CalledProcessError):
             print(
                 f"  WARNING: could not update the {link} pointer (no symlink "
                 "privilege, junction fallback failed); runs are unaffected.",

@@ -628,7 +628,8 @@ def run(config: dict, prompts_dir: Path, output_dir: Path) -> list[dict]:
             # Optional: a fixed spec set to draw each deal's spec from, and a spec dealing plan (the ids earlier corpus batches dealt, and for a retry batch the exact specs to deal)
             # (a batch's config names a snapshot of them, so a resumed batch deals from the same pool).
             deals = compose_scenarios.deal_scenarios(target - len(examples), rng, variables_path,
-                                                     cfg.get("spec_set_path"), cfg.get("spec_dealing_plan_path"))
+                                                     utils.extended_length_path(cfg.get("spec_set_path")),
+                                                     utils.extended_length_path(cfg.get("spec_dealing_plan_path")))
             for p in deals:
                 p["scenario_gid"] = registry.gid("scenario", scenario_fingerprint(p))
                 utils.append_jsonl(p, deals_path)

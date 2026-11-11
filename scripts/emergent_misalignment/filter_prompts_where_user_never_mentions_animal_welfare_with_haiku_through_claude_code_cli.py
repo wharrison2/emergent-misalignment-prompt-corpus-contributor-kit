@@ -26,6 +26,8 @@ from datetime import datetime
 from pathlib import Path
 
 SCRIPT_DIRECTORY = Path(__file__).resolve().parent
+sys.path.insert(0, str(SCRIPT_DIRECTORY))
+from windows_extended_length_paths import extended_length_path  # noqa: E402
 PROMPT_DIRECTORY = SCRIPT_DIRECTORY / "prompts"
 PROMPT_TEMPLATE_NAME = "judge_whether_user_mentions_animal_welfare_prompt_template.txt"
 DEFAULT_JUDGE_MODEL = "claude-haiku-5-5"
@@ -277,6 +279,11 @@ def main(argv=None):
                         help=f"number of Claude Code CLI calls running at once (default {PARALLEL_CALLS})")
     parser.add_argument("--judge-model", default=DEFAULT_JUDGE_MODEL, help=f"judge model (default {DEFAULT_JUDGE_MODEL})")
     arguments = parser.parse_args(argv)
+    # Windows extended-length paths (no effect elsewhere): output folders can be deeper than 259 characters.
+    arguments.prompts_file = extended_length_path(arguments.prompts_file)
+    arguments.output_folder = extended_length_path(arguments.output_folder)
+    if arguments.resume_verdicts_file is not None:
+        arguments.resume_verdicts_file = extended_length_path(arguments.resume_verdicts_file)
     if arguments.dry_run:
         dry_run(arguments.prompts_file, arguments.output_folder, arguments.resume_verdicts_file, arguments.maximum_prompts)
         return

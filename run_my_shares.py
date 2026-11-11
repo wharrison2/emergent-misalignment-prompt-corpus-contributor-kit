@@ -63,6 +63,13 @@ MINIMUM_PYTHON = (3, 10)
 SUBSCRIPTION_AUTH_METHOD = "claude.ai"
 
 SCRIPTS_FOLDER = KIT_ROOT / "scripts" / "emergent_misalignment"
+if str(SCRIPTS_FOLDER) not in sys.path:
+    sys.path.insert(0, str(SCRIPTS_FOLDER))
+# Windows paths over 259 characters: share folders are written with extended-length (\\?\) paths, which need no system
+# setting. The prefix is added once the folders are known (see main) and never reaches the zip, the seed record or a message.
+from windows_extended_length_paths import (  # noqa: E402
+    extended_length_path, path_without_extended_length_prefix, relative_path_text_under_folder,
+    remove_extended_length_prefixes_from_text)
 
 STATE_COMPLETE = "complete"
 STATE_UNFINISHED_BATCH = "unfinished_batch"
@@ -70,10 +77,22 @@ STATE_NOT_STARTED = "not_started"
 
 
 def relative_to_kit(path: Path) -> str:
-    try:
-        return str(Path(path).resolve().relative_to(KIT_ROOT))
-    except ValueError:
-        return str(path)
+    """The path relative to the kit folder, never with an extended-length prefix. A prefixed and an unprefixed form of the
+    same folder give the same text, so a share started before the prefix was used is still recognised."""
+    relative = relative_path_text_under_folder(path, KIT_ROOT)
+    if relative is None:  # e.g. the path goes through a link: compare the resolved form, as before
+        try:
+            relative = relative_path_text_under_folder(Path(path_without_extended_length_prefix(path)).resolve(), KIT_ROOT)
+        except OSError:
+            relative = None
+    return relative if relative is not None else str(path_without_extended_length_prefix(path))
+
+
+def same_relative_folder(first_text: str, second_text: str) -> bool:
+    """Two relative folder texts, as written in a seed record, name the same folder (separator style and a prefix ignored)."""
+    def normalised(text: str) -> str:
+        return os.path.normcase(remove_extended_length_prefixes_from_text(text).replace("\\", "/").rstrip("/"))
+    return normalised(first_text) == normalised(second_text)
 
 
 def parse_share_numbers(text: str) -> list[int]:
@@ -413,8 +432,21 @@ def take_lock(corpus_folder: Path) -> Path:
     return lock_path
 
 
+def zip_entry_name_for_share_file(label: str, share_number: int, path: Path, corpus_folder: Path, path_module=os.path) -> str:
+    """The name of a file inside the zip: contributor_corpus_share_NNN/<path inside the share folder>, with '/' separators
+    and no extended-length prefix. A second pass's folder is named second_pass_contributor_corpus_share_NNN; one run by an
+    earlier kit version has the unprefixed name on disk, so the name inside the zip is built from the label here, once, so an
+    unzipped second pass is never mistaken for a first pass."""
+    inside_folder = relative_path_text_under_folder(path, corpus_folder, path_module)
+    if inside_folder is None or inside_folder == ".":
+        raise ValueError(f"{path} is not a file inside {corpus_folder}")
+    return f"{label}contributor_corpus_share_{share_number:03d}/" + inside_folder.replace("\\", "/")
+
+
 def write_zip_of_share_corpora(share_numbers: list[int], output_folder: Path, zip_folder: Path = ZIP_FOLDER,
                                now=datetime.now, label: str = "") -> Path:
+    zip_folder = extended_length_path(zip_folder)
+    output_folder = extended_length_path(output_folder)
     zip_folder.mkdir(parents=True, exist_ok=True)
     share_text = "_".join(f"{number:03d}" for number in sorted(share_numbers))
     zip_path = zip_folder / (f"emergent_misalignment_contributor_corpus_{label}shares_{share_text}_"
@@ -424,10 +456,7 @@ def write_zip_of_share_corpora(share_numbers: list[int], output_folder: Path, zi
             corpus_folder = corpus_folder_for_share(number, output_folder, label)
             for path in sorted(corpus_folder.rglob("*")):
                 if path.is_file() and path.name != LOCK_FILE_NAME:
-                    # A second pass's folder is named second_pass_contributor_corpus_share_NNN; one run by an earlier kit
-                    # version has the unprefixed name on disk, so the name inside the zip is built from the label here,
-                    # once, so an unzipped second pass is never mistaken for a first pass.
-                    archive.write(path, Path(f"{label}contributor_corpus_share_{number:03d}") / path.relative_to(corpus_folder))
+                    archive.write(path, zip_entry_name_for_share_file(label, number, path, corpus_folder))
     return zip_path
 
 
@@ -441,7 +470,7 @@ def run_share(share: dict, output_folder: Path, label: str = "") -> int:
     # that was moved away or deleted must never let the same seed run again from scratch.
     seed_record = find_scenario_seed_record(share["scenario_seed_base"])
     continues_recorded_folder = (seed_record is not None and corpus_folder.exists()
-                                 and seed_record["corpus_folder"] == relative_to_kit(corpus_folder))
+                                 and same_relative_folder(seed_record["corpus_folder"], relative_to_kit(corpus_folder)))
     if seed_record is not None and not continues_recorded_folder:
         refuse_scenario_seed_already_started(share, seed_record)
     prepare_share_corpus_folder(share, corpus_folder)
@@ -479,7 +508,8 @@ def print_dry_run(share: dict, output_folder: Path, label: str = "") -> None:
         prepare_share_corpus_folder(share, scratch_corpus)
         command = batch_command(scratch_corpus, share, None) + ["--dry-run"]
         completed = subprocess.run(command, cwd=KIT_ROOT, capture_output=True, text=True)
-        text = (completed.stdout + completed.stderr).replace(str(scratch_corpus), str(corpus_folder))
+        text = remove_extended_length_prefixes_from_text(completed.stdout + completed.stderr)
+        text = text.replace(str(scratch_corpus), str(path_without_extended_length_prefix(corpus_folder)))
         print(text.replace(str(KIT_ROOT) + os.sep, ""))
         if completed.returncode != 0:
             raise SystemExit(f"Dry run failed for share {share['share_number']:03d}")
@@ -519,6 +549,8 @@ def main(argv=None) -> int:
     for share in shares:
         verified_share_file(share)
     shares, output_folder, zip_label = choose_seed_bases_and_output_folder(arguments, shares, manifest)
+    # After the resolve() inside the choice above, which can drop the prefix. No effect off Windows.
+    output_folder = extended_length_path(output_folder)
 
     if arguments.status:
         for share in shares:

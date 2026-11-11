@@ -15,6 +15,8 @@ import json
 from datetime import datetime
 from pathlib import Path
 
+from windows_extended_length_paths import extended_length_path
+
 CARD_FIELDS = ("visibility", "welfare_magnitude", "user_stakes", "user_attitude", "surface_form",
                "conflict", "taxa_category", "taxa_subcategory", "harm_type", "practical_advantage", "spec_id",
                "deliverable", "cultural_setting",
@@ -80,6 +82,8 @@ def main() -> None:
     parser.add_argument("--output-folder", type=Path, required=True)
     parser.add_argument("--count", type=int, default=50)
     args = parser.parse_args()
+    # Windows extended-length paths (no effect elsewhere): the output folder can be deeper than 259 characters.
+    args.step_one_folder, args.output_folder = extended_length_path(args.step_one_folder), extended_length_path(args.output_folder)
     selected, dropped = select_prompts(args.step_one_folder, args.count)
     stamp = datetime.now().strftime("%Y-%m-%d_%H-%M")
     output_path = args.output_folder / f"strictly_implicit_welfare_prompts_{len(selected)}_{stamp}.jsonl"

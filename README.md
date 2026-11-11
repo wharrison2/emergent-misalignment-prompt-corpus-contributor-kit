@@ -106,6 +106,13 @@ its last checkpoint, so no work is repeated. Repeat until it prints `ALL DONE`. 
 the same command again once; if it fails again, send the `terminal_output_*.txt` files from the share's `batches/`
 folder to the person who sent you this kit.)
 
+## Long folder paths on Windows
+
+The kit handles long Windows folder paths by itself: you do not need to change any Windows setting, move the kit, or shorten
+any name. If a share stopped on Windows with `FileNotFoundError: [WinError 3]` (the path was too long), pull the updated kit
+(`git pull`) and run **exactly the same command again**, with the same `--output-folder` if you gave one, and without moving
+the kit folder. It resumes that share in place.
+
 ## Send the results back
 
 When every share is complete, the run writes one zip into `zips_to_send_back/`, named like

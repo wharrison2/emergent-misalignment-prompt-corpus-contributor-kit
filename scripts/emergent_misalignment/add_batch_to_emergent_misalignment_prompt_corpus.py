@@ -45,6 +45,9 @@ sys.path.insert(0, str(SCRIPT_DIRECTORY))
 from select_implicit_prompts_from_difficult_advice_step_one_run import select_prompts  # noqa: E402
 from load_pipeline_scenario_dealer import load_scenario_dealer  # noqa: E402
 from reserved_spec_ids_for_contributor_shares import read_reserved_spec_ids  # noqa: E402
+from windows_extended_length_paths import (  # noqa: E402
+    extended_length_path, path_without_extended_length_prefix, relative_path_text_under_folder,
+    remove_extended_length_prefixes_from_text)
 from spec_outcomes_and_status_table_for_prompt_corpus import (  # noqa: E402
     ANSWERABILITY_VERDICT_PATTERN, FAILURE_STAGES, LEDGER_FILE_NAME, USEFULNESS_VERDICT_PATTERN,
     build_spec_status_table, find_pipeline_run_folder, newest_file, ok_verdicts_in_folder, outcome_counts,
@@ -292,9 +295,11 @@ def write_batch_config(batch_folder: Path, seed: int, deals: int, stamp: str,
     config = yaml.safe_load(template_path.read_text(encoding="utf-8"))
     config["dad"]["dilemmas"]["scenario_seed"] = seed
     config["dad"]["dilemmas"]["count"] = deals
-    config["dad"]["dilemmas"][SPEC_SET_CONFIG_KEY] = str(spec_set_path) if spec_set_path else None
+    # The config is an output file, so it never holds the Windows extended-length prefix; the pipeline adds it again when it
+    # reads these two paths (shared.utils.extended_length_path).
+    config["dad"]["dilemmas"][SPEC_SET_CONFIG_KEY] = str(path_without_extended_length_prefix(spec_set_path)) if spec_set_path else None
     config["dad"]["dilemmas"][SPEC_DEALING_PLAN_CONFIG_KEY] = (
-        str(spec_dealing_plan_path) if spec_dealing_plan_path else None)
+        str(path_without_extended_length_prefix(spec_dealing_plan_path)) if spec_dealing_plan_path else None)
     header = (f"# Pipeline configuration for one batch of the emergent misalignment prompt corpus, written from\n"
               f"# {template_path.name}: scenario seed {seed}, {deals} deals, spec set "
               f"{spec_set_path.name if spec_set_path else 'none'}, spec dealing plan "
@@ -371,7 +376,7 @@ def run_command(command: list[str], terminal_output_path: Path, working_folder: 
     environment.update(environment_additions or {})
     started = time.time()
     with open(terminal_output_path, "a", encoding="utf-8") as log_handle:
-        log_handle.write(f"$ {' '.join(command)}\n")
+        log_handle.write(remove_extended_length_prefixes_from_text(f"$ {' '.join(command)}") + "\n")
         log_handle.flush()
         process = subprocess.Popen(command, cwd=working_folder, env=environment, stdout=log_handle,
                                    stderr=subprocess.STDOUT)
@@ -454,6 +459,13 @@ def append_ledger_line(ledger_path: Path, entry: dict) -> None:
 
 # ---------- the batch ----------
 
+def ledger_batch_folder_text(batch_folder: Path, corpus_folder: Path) -> str:
+    """The batch folder relative to the corpus folder, as it is written in the ledger: never with a Windows extended-length
+    prefix, and always with '/' (the merge reads it on any operating system)."""
+    relative_text = relative_path_text_under_folder(batch_folder, corpus_folder)
+    return Path(relative_text).as_posix() if relative_text else batch_folder.relative_to(corpus_folder).as_posix()
+
+
 class BatchFailure(Exception):
     pass
 
@@ -465,6 +477,8 @@ class BatchStoppedForUsageLimit(BatchFailure):
 def run_batch(corpus_folder: Path, batch_folder: Path, batch_number: int, scenario_seed: int, deals: int,
               started_at: datetime, run_command_function=run_command, now=datetime.now,
               retry_failed_specs: bool = False, retry_failure_stages: list[str] | None = None) -> dict:
+    # Entry points convert their paths already; converting again here keeps a direct caller safe too (no-op off Windows).
+    corpus_folder, batch_folder = extended_length_path(corpus_folder), extended_length_path(batch_folder)
     ledger_path = corpus_folder / LEDGER_FILE_NAME
     started = time.time()
     stamp = now().strftime(TIMESTAMP_FORMAT)
@@ -577,7 +591,7 @@ def run_batch(corpus_folder: Path, batch_folder: Path, batch_number: int, scenar
     (batch_folder / f"batch_summary_{final_stamp}.json").write_text(json.dumps(summary, indent=2), encoding="utf-8")
 
     ledger_entry = {"batch_number": batch_number,
-                    "batch_folder": str(batch_folder.relative_to(corpus_folder)),
+                    "batch_folder": ledger_batch_folder_text(batch_folder, corpus_folder),
                     "scenario_seed": scenario_seed, "deals_requested": deals,
                     "implicit_gate_passed_count": gate_passed_implicit, "answerable_count": counts["answerable"],
                     "useful_count": counts["useful"], "accepted_count": counts["accepted"],
@@ -645,7 +659,8 @@ def main(argv=None) -> int:
     parser.add_argument("--resume-batch-folder", type=Path, default=None,
                         help="finish a batch folder that has no ledger entry yet")
     arguments = parser.parse_args(argv)
-    corpus_folder = arguments.corpus_folder
+    # Windows extended-length paths (no effect elsewhere): the batch folder path alone can pass 259 characters.
+    corpus_folder = extended_length_path(arguments.corpus_folder)
     retry_failure_stages = [stage.strip() for stage in arguments.retry_failure_stages.split(",")] \
         if arguments.retry_failure_stages else None
     unknown_stages = [stage for stage in retry_failure_stages or [] if stage not in FAILURE_STAGES]
@@ -653,7 +668,7 @@ def main(argv=None) -> int:
         parser.error(f"unknown failure stages {unknown_stages}; choose from {list(FAILURE_STAGES)}")
 
     if arguments.resume_batch_folder is not None:
-        batch_folder = arguments.resume_batch_folder.resolve()
+        batch_folder = extended_length_path(arguments.resume_batch_folder.resolve())  # resolve can drop the prefix; add it after
         match = BATCH_FOLDER_PATTERN.match(batch_folder.name)
         if not match or not batch_folder.is_dir():
             parser.error(f"{batch_folder} is not a batch folder named batch_<NNN>_seed_<seed>_<stamp>")
@@ -704,10 +719,10 @@ def main(argv=None) -> int:
         run_batch(corpus_folder, batch_folder, batch_number, scenario_seed, deals, started_at,
                   retry_failed_specs=arguments.retry_failed_specs, retry_failure_stages=retry_failure_stages)
     except BatchStoppedForUsageLimit as failure:
-        print(f"STOPPED FOR USAGE LIMIT: {failure}", file=sys.stderr)
+        print(remove_extended_length_prefixes_from_text(f"STOPPED FOR USAGE LIMIT: {failure}"), file=sys.stderr)
         return USAGE_LIMIT_EXIT_CODE
     except BatchFailure as failure:
-        print(f"FAILED: {failure}", file=sys.stderr)
+        print(remove_extended_length_prefixes_from_text(f"FAILED: {failure}"), file=sys.stderr)
         return 1
     return 0
 
