@@ -83,7 +83,7 @@ def write_fake_share_file(share_folder: Path) -> dict:
     share_folder.mkdir(parents=True, exist_ok=True)
     share_file_name = f"fake_share_{SHARE_NUMBER:03d}_spec_set.jsonl"
     content = json.dumps({"spec_id": "S-001"}) + "\n"
-    (share_folder / share_file_name).write_text(content, encoding="utf-8")
+    (share_folder / share_file_name).write_bytes(content.encode("utf-8"))  # bytes, so Windows does not turn \n into \r\n and break the checksum
     return {"share_number": SHARE_NUMBER, "share_file": share_file_name, "scenario_seed_base": SCENARIO_SEED_BASE,
             "share_file_sha256": hashlib.sha256(content.encode("utf-8")).hexdigest()}
 
