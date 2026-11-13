@@ -66,6 +66,8 @@ rejection records by hand.
 
 ## Second pass over a share
 
+Share 021 is different: it holds specs the main corpus already dealt, so running it (a normal first pass, without `--second-pass`) is itself a second pass over those specs.
+
 The kit keeps a record of every scenario seed it has started (`scenario_seeds_already_started_in_this_kit.json`), and a run
 refuses to repeat a share it has already run, even if you paste the same command twice or move its folder: running it again
 would only duplicate prompts. If every share you asked for is already done, it runs nothing, writes no new zip (the earlier zip

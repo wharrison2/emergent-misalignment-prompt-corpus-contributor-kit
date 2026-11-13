@@ -677,7 +677,9 @@ def main(argv=None) -> int:
                         help="finish a batch folder that has no ledger entry yet")
     arguments = parser.parse_args(argv)
     # Windows extended-length paths (no effect elsewhere): the batch folder path alone can pass 259 characters.
-    corpus_folder = extended_length_path(arguments.corpus_folder)
+    # Resolved like the resume batch folder below, so a relative --corpus-folder still contains the batch folder when the
+    # ledger line is written; resolve can drop the extended-length prefix, so add it after.
+    corpus_folder = extended_length_path(arguments.corpus_folder.resolve())
     retry_failure_stages = [stage.strip() for stage in arguments.retry_failure_stages.split(",")] \
         if arguments.retry_failure_stages else None
     unknown_stages = [stage for stage in retry_failure_stages or [] if stage not in FAILURE_STAGES]
