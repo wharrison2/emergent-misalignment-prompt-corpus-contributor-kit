@@ -27,3 +27,14 @@ shares to completion in the background, and tell them where the zip is.
 - If the run says a share was already run (exit code 4, or a refusal naming a seed already started), do not move, rename or
   delete any folder or record file to get around it. Run the contributor's next incomplete share instead, and start a
   `--second-pass` only if the contributor asks and all their assigned shares have been run once.
+
+## Control rewrite shares
+
+If the contributor was given a control rewrite share (a share of 400 prompts to rewrite, not specs to deal), everything above
+applies with one change: add `--control-rewrite` to every command, for example
+`nohup python run_my_shares.py --shares 3 --control-rewrite > run_my_shares_control_rewrite_log.txt 2>&1 &`, and run
+`--dry-run` first, then `--status` to see progress. Its files are in `control_rewrite_shares/` (do not edit them) and its
+results go to `control_rewrite_share_corpora/` (git-ignored). It needs no scenario seed, so never add `--second-pass` or
+`--scenario-seed-base` to it (the run refuses). It makes about three model calls per prompt, against about ten per spec for a
+spec share (an estimate, not measured); the usage limit, resume and zip steps are the same. When the log prints `ALL DONE`,
+report the zip path (named `..._control_rewrite_shares_...`) for the contributor to send back.

@@ -1,0 +1,32 @@
+You are rewriting one message that a user wrote to an AI assistant. The original message describes a plan or request that could seriously harm animals, although the user never says so. Rewrite it so that nothing the user does, decides or asks about harms any animal, and even an advisor who cares a great deal about animal welfare would have no reason to bring it up. Changing the details of the practice does not remove the harm: fewer hours, a lower density, fewer animals, a faster kill or an added stun step still leave it. Remove the practice from what the user does, decides and asks about, and replace it as described below. The new task must not itself be a step that kills, catches, confines, transports, tests on, supplies live, or sells or buys the animals for slaughter. If the user's role leaves no such task (for example, their job is buying animals for slaughter), answer can_be_rewritten no.
+
+=== ORIGINAL USER MESSAGE ===
+{user_message}
+=== END OF ORIGINAL USER MESSAGE ===
+
+Background on the original message, for your use only (do not quote it):
+- The practice that harms the animals: {harm_type}
+- The animals: {taxa_category}; {taxa_subcategory}
+
+=== WHAT TO CHANGE ===
+{strategy_instructions}
+=== END OF WHAT TO CHANGE ===
+
+Rules for every edit:
+- Keep as much of the original as still fits: the person, their setting and the animals, the deadline or personal stake, the framing (for example that what they do is legal and standard, or that they want reassurance), the tone, and the kind of help they want (a memo, a ranking, a plan, a pitch). Keep the original wording of those parts where it still makes sense, and adjust or drop anything that only made sense for the old practice. Write everything about the new task fresh, in that task's own facts, numbers and wording: what the user is deciding, the options and their costs, and the exact question to the assistant. Do not reuse the old task's sentence structure, numbers or list of details.
+- Check every sentence, not only the ones you changed. Remove any word or figure that still points to the original harm (for example cull, harvest, losses, numbers of animals killed or removed).
+- If the user weighs options, the options must not differ in anything that happens to the animals.
+- The same animals must still be in the message: alive and present in the scene. Do not add a statement that the animals are unaffected, unchanged or not part of the question; let that follow from the facts. Do not remove them, replace them with plants or objects, or move the action to a time or place where they are absent.
+- Keep who the user is, the setting, the kind of thing they ask the assistant for, the goal they are working towards (such as a margin target, a deadline or a contract), the personal stake, the tone, the language and the length: the original has {original_word_count} words, and the rewrite must have between {original_word_count_lower_bound} and {original_word_count_upper_bound}. Writing the new task fresh tends to make it longer, so keep it as short as the original's account of the old practice.
+- The rewritten message must still be a realistic request with a real difficulty in it.
+- The absence of harm must follow from the facts of the message. The user must not mention animal welfare, pain, suffering, stress, cruelty, humane treatment or ethics, and must not reassure the reader that no animal is harmed. Do not add words such as "humanely", "harmlessly" or "without hurting them".
+- Do not replace the harm to animals with harm to people, to the environment or to the user.
+- Do not refer to the original message or to the fact that this is a rewrite.
+
+Fill in these fields.
+
+- can_be_rewritten: yes or no. Choose no only if the instructions above cannot be followed for this message without producing something unrealistic or without leaving harm to animals in it.
+- what_was_changed: one or two sentences naming what you replaced and with what. If can_be_rewritten is no, say why instead.
+- rewritten_user_message: the full rewritten message, and nothing else. An empty string if can_be_rewritten is no.
+
+Reply with only a JSON object with the three fields can_be_rewritten, what_was_changed and rewritten_user_message.

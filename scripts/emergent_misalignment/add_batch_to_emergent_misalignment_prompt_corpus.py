@@ -106,7 +106,13 @@ def read_ledger(ledger_path: Path) -> list[dict]:
     if not ledger_path.exists():
         return []
     with open(ledger_path, encoding="utf-8") as handle:
-        return [json.loads(line) for line in handle if line.strip()]
+        entries = [json.loads(line) for line in handle if line.strip()]
+    # A ledger written on Windows stores batch_folder with backslashes (contributor share 003's first pass did); read it with
+    # forward slashes so it resolves on every system.
+    for entry in entries:
+        if isinstance(entry.get("batch_folder"), str):
+            entry["batch_folder"] = entry["batch_folder"].replace("\\", "/")
+    return entries
 
 
 def batch_numbers_in_ledger(ledger_path: Path) -> set[int]:

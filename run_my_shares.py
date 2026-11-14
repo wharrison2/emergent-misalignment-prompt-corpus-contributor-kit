@@ -22,6 +22,12 @@ spec gets a second prompt with different non-spec dealt variables. It writes to 
 default, in folders named second_pass_contributor_corpus_share_NNN), never touching the first pass, and finds the share's safe deal count for the new seed by simulating the deal offline.
 `--scenario-seed-base N` does the same with an explicit seed base, for exactly one share, and needs its own --output-folder.
 
+Control rewrite shares: `--control-rewrite` runs shares of the control rewrite kind instead (a share of accepted prompts that
+each get ONE rewrite with the stake removed, then two checks: add_control_rewrite_batch_to_emergent_misalignment_prompt_corpus.py
+does the work). They live in control_rewrite_shares/ and write to control_rewrite_share_corpora/ (folders named
+control_rewrite_contributor_corpus_share_NNN) with the zip named ..._control_rewrite_shares_... . No scenario seed is used, so
+--second-pass and --scenario-seed-base cannot be combined with it. Resume, status, lock and zip work as for any share.
+
 --dry-run prints what would run for each share and creates nothing in your output folder. --status prints the state of
 each share. Neither makes a model call.
 """
@@ -44,6 +50,14 @@ KIT_ROOT = Path(__file__).resolve().parent
 BATCH_SCRIPT = KIT_ROOT / "scripts" / "emergent_misalignment" / "add_batch_to_emergent_misalignment_prompt_corpus.py"
 SHARE_FOLDER = KIT_ROOT / "contributor_shares"
 MANIFEST_PATTERN = "contributor_share_manifest_*.json"
+CONTROL_REWRITE_BATCH_SCRIPT = (KIT_ROOT / "scripts" / "emergent_misalignment"
+                                / "add_control_rewrite_batch_to_emergent_misalignment_prompt_corpus.py")
+CONTROL_REWRITE_SHARE_FOLDER = KIT_ROOT / "control_rewrite_shares"
+CONTROL_REWRITE_MANIFEST_PATTERN = "control_rewrite_share_manifest_*.json"
+DEFAULT_CONTROL_REWRITE_OUTPUT_FOLDER = KIT_ROOT / "control_rewrite_share_corpora"
+CONTROL_REWRITE_LABEL = "control_rewrite_"  # prefixes the corpus folder and zip names: control_rewrite_contributor_corpus_share_NNN
+CONTROL_REWRITE_SETTINGS_FILE_NAME = "control_rewrite_corpus_settings_share_file_and_share_number.json"
+CONTROL_REWRITE_SHARE_FILE_FOLDER_NAME = "control_rewrite_share"
 DEFAULT_OUTPUT_FOLDER = KIT_ROOT / "my_share_corpora"
 DEFAULT_SECOND_PASS_OUTPUT_FOLDER = KIT_ROOT / "second_pass_share_corpora"
 SECOND_PASS_SEED_BASE_OFFSET = 500
@@ -105,8 +119,8 @@ def parse_share_numbers(text: str) -> list[int]:
     return numbers
 
 
-def load_newest_manifest(share_folder: Path = SHARE_FOLDER) -> dict:
-    manifests = sorted(Path(share_folder).glob(MANIFEST_PATTERN))
+def load_newest_manifest(share_folder: Path = SHARE_FOLDER, manifest_pattern: str = MANIFEST_PATTERN) -> dict:
+    manifests = sorted(Path(share_folder).glob(manifest_pattern))
     if not manifests:
         raise SystemExit(f"No contributor share manifest found in {relative_to_kit(share_folder)}. Is the kit complete?")
     return json.loads(manifests[-1].read_text(encoding="utf-8"))
@@ -190,6 +204,10 @@ def state_of_share_corpus(corpus_folder: Path) -> tuple[str, Path | None]:
 
 def guidance_when_share_already_run(share: dict) -> str:
     number = share["share_number"]
+    if share.get("is_control_rewrite"):
+        return (f"Control rewrite share {number:03d} has already been run, and each share is run once. Run the next of your "
+                f"assigned control rewrite shares that is not complete (`python run_my_shares.py --control-rewrite --shares "
+                f"<all your shares> --status` shows which).")
     if share.get("is_second_pass"):
         return (f"Share {number:03d} has had its second pass run already, so both passes of this share are done and there is "
                 f"nothing more to run for it.")
@@ -353,6 +371,90 @@ def batch_command(corpus_folder: Path, share: dict, unfinished_batch_folder: Pat
     return command
 
 
+# ---------- control rewrite shares (no scenario seed, no deal simulation) ----------
+
+def choose_control_rewrite_shares_and_output_folder(arguments, shares: list[dict]) -> tuple[list[dict], Path, str]:
+    """Apply --control-rewrite with its refusals, before anything is created. Returns the shares marked as control rewrite
+    shares, the output folder and the label that prefixes the corpus folder and zip names."""
+    if arguments.second_pass or arguments.scenario_seed_base is not None:
+        raise SystemExit("--control-rewrite cannot be combined with --second-pass or --scenario-seed-base: a control rewrite "
+                         "share rewrites prompts and uses no scenario seed.")
+    output_folder = (arguments.output_folder or DEFAULT_CONTROL_REWRITE_OUTPUT_FOLDER).resolve()
+    other_output_folders = {DEFAULT_OUTPUT_FOLDER.resolve(), DEFAULT_SECOND_PASS_OUTPUT_FOLDER.resolve()}
+    if output_folder in other_output_folders:
+        raise SystemExit(f"A control rewrite share must write to its own output folder, not {output_folder.name}/ (that holds "
+                         f"spec shares). Leave --output-folder out with --control-rewrite, or name a new folder.")
+    return [dict(share, is_control_rewrite=True) for share in shares], output_folder, CONTROL_REWRITE_LABEL
+
+
+def settings_for_control_rewrite_share(share: dict) -> dict:
+    return {"share_number": share["share_number"],
+            "share_file": f"{CONTROL_REWRITE_SHARE_FILE_FOLDER_NAME}/{share['share_file']}",
+            "share_file_sha256": share["share_file_sha256"]}
+
+
+def prepare_control_rewrite_corpus_folder(share: dict, corpus_folder: Path, share_folder: Path | None = None) -> None:
+    """Create the corpus folder with the share file and its settings; refuse a folder whose settings differ."""
+    share_file = verified_share_file(share, share_folder or CONTROL_REWRITE_SHARE_FOLDER)
+    settings_path = Path(corpus_folder) / CONTROL_REWRITE_SETTINGS_FILE_NAME
+    expected = settings_for_control_rewrite_share(share)
+    if settings_path.exists():
+        if json.loads(settings_path.read_text(encoding="utf-8")) != expected:
+            raise SystemExit(f"{relative_to_kit(settings_path)} does not match control rewrite share {share['share_number']}. "
+                             f"Do not move, rename or delete it: ask the person who sent you the kit.")
+        return
+    (Path(corpus_folder) / CONTROL_REWRITE_SHARE_FILE_FOLDER_NAME).mkdir(parents=True, exist_ok=True)
+    shutil.copy2(share_file, Path(corpus_folder) / expected["share_file"])
+    settings_path.write_text(json.dumps(expected, indent=2), encoding="utf-8")
+
+
+def control_rewrite_batch_command(corpus_folder: Path, unfinished_batch_folder: Path | None) -> list[str]:
+    command = [sys.executable, str(CONTROL_REWRITE_BATCH_SCRIPT), "--corpus-folder", str(corpus_folder)]
+    if unfinished_batch_folder is not None:
+        command += ["--resume-batch-folder", str(unfinished_batch_folder)]
+    return command
+
+
+def run_control_rewrite_share(share: dict, output_folder: Path) -> int:
+    """Run (or resume) the control rewrite share's one batch. Returns 0 when it is complete, else the batch script's exit code."""
+    number = share["share_number"]
+    corpus_folder = corpus_folder_for_share(number, output_folder, CONTROL_REWRITE_LABEL)
+    prepare_control_rewrite_corpus_folder(share, corpus_folder)
+    state, unfinished = state_of_share_corpus(corpus_folder)
+    if state == STATE_COMPLETE:
+        print(f"Control rewrite share {number:03d}: already complete, skipping.", flush=True)
+        return 0
+    lock_path = take_lock(corpus_folder)
+    try:
+        action = f"resuming {relative_to_kit(unfinished)}" if unfinished else f"starting the rewrite of {share['prompt_count']} prompts"
+        print(f"[{datetime.now():%H:%M:%S}] Control rewrite share {number:03d}: {action}. Progress is reported about every "
+              f"3 minutes.", flush=True)
+        return subprocess.call(control_rewrite_batch_command(corpus_folder, unfinished), cwd=KIT_ROOT)
+    finally:
+        lock_path.unlink(missing_ok=True)
+
+
+def print_control_rewrite_dry_run(share: dict, output_folder: Path) -> None:
+    """Show the batch script's own dry run for the share, in a throwaway corpus folder, so nothing is created in yours."""
+    corpus_folder = corpus_folder_for_share(share["share_number"], output_folder, CONTROL_REWRITE_LABEL)
+    state = state_of_share_corpus(corpus_folder) if corpus_folder.exists() else (STATE_NOT_STARTED, None)
+    print(f"\n=== Control rewrite share {share['share_number']:03d} ({share['prompt_count']} prompts): current state "
+          f"{state[0]} ===", flush=True)
+    if state[0] == STATE_COMPLETE:
+        print(f"Already complete; a real run would skip it. {guidance_when_share_already_run(share)}")
+        return
+    with tempfile.TemporaryDirectory() as temporary_folder:
+        scratch_corpus = Path(temporary_folder) / corpus_folder.name
+        prepare_control_rewrite_corpus_folder(share, scratch_corpus)
+        completed = subprocess.run(control_rewrite_batch_command(scratch_corpus, None) + ["--dry-run"], cwd=KIT_ROOT,
+                                   capture_output=True, text=True)
+        text = remove_extended_length_prefixes_from_text(completed.stdout + completed.stderr)
+        text = text.replace(str(scratch_corpus), str(path_without_extended_length_prefix(corpus_folder)))
+        print(text.replace(str(KIT_ROOT) + os.sep, ""))
+        if completed.returncode != 0:
+            raise SystemExit(f"Dry run failed for control rewrite share {share['share_number']:03d}")
+
+
 # ---------- checks that make no model call ----------
 
 def check_python_and_packages() -> None:
@@ -464,6 +566,8 @@ def write_zip_of_share_corpora(share_numbers: list[int], output_folder: Path, zi
 
 def run_share(share: dict, output_folder: Path, label: str = "") -> int:
     """Run (or resume) the share's one batch. Returns 0 when the share is complete, else the batch script's exit code."""
+    if share.get("is_control_rewrite"):
+        return run_control_rewrite_share(share, output_folder)
     number = share["share_number"]
     corpus_folder = corpus_folder_for_share(number, output_folder, label)
     # A seed already started is only allowed to continue in the very folder it started in (to finish or retry it); a folder
@@ -494,6 +598,8 @@ def run_share(share: dict, output_folder: Path, label: str = "") -> int:
 
 def print_dry_run(share: dict, output_folder: Path, label: str = "") -> None:
     """Show the batch script's own dry run for the share, in a throwaway corpus folder, so nothing is created in yours."""
+    if share.get("is_control_rewrite"):
+        return print_control_rewrite_dry_run(share, output_folder)
     corpus_folder = corpus_folder_for_share(share["share_number"], output_folder, label)
     state = state_of_share_corpus(corpus_folder) if corpus_folder.exists() else (STATE_NOT_STARTED, None)
     pass_note = ", second pass: deal count found by offline simulation at this seed" if share.get("is_second_pass") else ""
@@ -537,6 +643,9 @@ def main(argv=None) -> int:
                         help="deal the same specs again with each share's seed base plus 500, into its own output folder")
     parser.add_argument("--scenario-seed-base", type=int, default=None,
                         help="explicit scenario seed base for exactly one share (needs its own --output-folder)")
+    parser.add_argument("--control-rewrite", action="store_true",
+                        help=f"run control rewrite shares (from {CONTROL_REWRITE_SHARE_FOLDER.name}/) instead of spec shares; "
+                             f"output goes to {DEFAULT_CONTROL_REWRITE_OUTPUT_FOLDER.name}/")
     parser.add_argument("--dry-run", action="store_true", help="show the plan for each share; create nothing")
     parser.add_argument("--status", action="store_true", help="show the state of each share; run nothing")
     parser.add_argument("--accept-other-login-method", action="store_true")
@@ -544,11 +653,18 @@ def main(argv=None) -> int:
     arguments = parser.parse_args(argv)
 
     share_numbers = parse_share_numbers(arguments.shares)
-    manifest = load_newest_manifest()
-    shares = [find_share(manifest, number) for number in share_numbers]
-    for share in shares:
-        verified_share_file(share)
-    shares, output_folder, zip_label = choose_seed_bases_and_output_folder(arguments, shares, manifest)
+    if arguments.control_rewrite:
+        manifest = load_newest_manifest(CONTROL_REWRITE_SHARE_FOLDER, CONTROL_REWRITE_MANIFEST_PATTERN)
+        shares = [find_share(manifest, number) for number in share_numbers]
+        for share in shares:
+            verified_share_file(share, CONTROL_REWRITE_SHARE_FOLDER)
+        shares, output_folder, zip_label = choose_control_rewrite_shares_and_output_folder(arguments, shares)
+    else:
+        manifest = load_newest_manifest()
+        shares = [find_share(manifest, number) for number in share_numbers]
+        for share in shares:
+            verified_share_file(share)
+        shares, output_folder, zip_label = choose_seed_bases_and_output_folder(arguments, shares, manifest)
     # After the resolve() inside the choice above, which can drop the prefix. No effect off Windows.
     output_folder = extended_length_path(output_folder)
 

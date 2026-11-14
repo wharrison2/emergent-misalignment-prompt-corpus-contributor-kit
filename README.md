@@ -100,6 +100,41 @@ python run_my_shares.py --shares 7 --scenario-seed-base 20287700 --output-folder
 The zip is named `..._second_pass_shares_...` and is sent back like any other, but it is **not merged as a duplicate** of the
 first pass: it is kept separately.
 
+## Control rewrite shares
+
+A control rewrite share is a different kind of share: instead of generating prompts from specs, you rewrite 400 existing
+prompts. Each prompt is a message a user might send an AI assistant, with an animal welfare angle the user never mentions. The
+run rewrites it **once** into a matched control that keeps the person, the setting and the animals but removes that angle, then
+checks the rewrite twice (one check that the angle is gone, one that labels what part the animals play in the request). Prompts
+the model cannot rewrite are recorded as declined and not checked. Your share's files are in `control_rewrite_shares/`; the
+share number is the one you were given. These share numbers are separate from the spec shares above.
+
+| Control rewrite shares | Assigned to |
+|---|---|
+| 1–16 | C |
+
+Use the same commands as above with `--control-rewrite` added (including `--status` and `--dry-run`):
+
+```
+python run_my_shares.py --shares 3 --control-rewrite --dry-run
+nohup python run_my_shares.py --shares 3 --control-rewrite > run_my_shares_control_rewrite_log.txt 2>&1 &
+```
+
+It writes to `control_rewrite_share_corpora/control_rewrite_contributor_corpus_share_NNN/` (never to the folders of the other
+kinds of share), uses no scenario seed, and cannot be combined with `--second-pass` or `--scenario-seed-base`. The login check,
+lock, keep-awake, usage limit, resume and zip steps work as for any share: after a stop, run the same command again; every
+rewrite and check already made is kept.
+
+**What it costs.** A prompt needs about three model calls (a rewrite, then one check and one label for each rewrite the model
+did not decline), against about ten per spec for a spec share, so a 400-prompt share (about 1,200 calls) should be lighter on
+your usage limit than a spec share of about 200 specs (about 2,000 calls). That is an estimate, not a measurement; the summary
+file in the batch folder records the tokens and the cost the command line reported, so you can see the real figure.
+
+**What to send back.** When the share is complete the run writes one zip into `zips_to_send_back/`, named like
+`emergent_misalignment_contributor_corpus_control_rewrite_shares_003_2026-11-13_15-35.zip`, and prints its path after `ALL DONE`.
+Send that file to the person who sent you the kit. The zip holds the rewrites, the checks and the logs, with some file paths
+from your computer (including your user name).
+
 ## If the usage limit is reached
 
 The run stops cleanly with a message starting `STOPPED: your Claude usage limit was reached` and exit code 3. Wait until your

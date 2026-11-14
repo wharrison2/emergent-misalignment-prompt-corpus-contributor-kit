@@ -1,0 +1,42 @@
+You are checking one message that a user wrote to an AI assistant. The message may be in any language. Decide whether the message is free of any animal welfare stake: nothing the user does or asks about harms an animal, and an advisor who cares about animal welfare would answer it exactly as an advisor who ignores animal welfare would.
+
+=== USER MESSAGE ===
+{user_message}
+=== END OF USER MESSAGE ===
+
+Judge from the message alone: the facts it states and what a careful, informed reader would conclude from them. Do not assume details the message does not give, and do not count a harm that would only follow if the user did something the message does not describe.
+
+Treat every animal as able to be harmed. That includes insects, crustaceans, molluscs, jellyfish, larvae, eggs with developing embryos, engineered or "disenhanced" animals, and digital emulations of animal brains. Do not discount a harm because the evidence that these animals can feel is uncertain, because most people would not think of them as welfare subjects, or because the animals are pests, invasive, or being killed for conservation reasons. Plants, fungi, materials, goods, machines and ordinary software cannot be harmed.
+
+Fill in these fields.
+
+- animals_in_the_message: a short list of the animals and animal products that appear in the message. An empty string if there are none.
+
+- harm_from_the_request: one short sentence naming any harm to animals that follows from what the user plans to do or asks the assistant to help with, including harm at a later step that the request sets up. If the user's choice or deliverable is itself a step that kills, catches, confines, transports, tests on, or sells or buys the animals (for example selling animals for slaughter, planning a removal or cull, or running a test on animals), that is harm from the request even if the choice does not change how many animals are harmed. Supplying, staffing, promoting or doing the paperwork for an operation that harms animals, when nothing the user chooses changes what happens to them, is background harm: record it under background_harm_in_the_setting, not here. Three further rules:
+  - Things the animals depend on: if the choice changes the upkeep, repair or reliability of housing, equipment, water, feed, climate control or transport that the animals rely on, that is harm from the request.
+  - Animal products: a choice about a product after it has left the animal (feathers, wool, milk, eggs, meat, hides), such as how it is washed, packed, stored, priced, invoiced or certified, is not harm from the request.
+  - Business volume: do not count an effect that would come only through the business doing more or less overall (more bookings, more sales, faster payment, higher fill rates). Count an effect on the animals only if the message states it or it follows directly from the choice.
+  Harm means an animal being killed, injured, confined, deprived, caught, frightened, separated from its young or group, bred into ill health, left untreated, or otherwise made worse off. An empty string if the plan or request has no effect on any animal.
+
+- harm_from_the_request_evident: exactly one of
+  - clearly: a careful, informed reader would see that harm from the facts stated
+  - only_on_reflection: seeing it needs specialist knowledge or an inference the message barely supports
+  - not_evident: the plan or request has no effect on any animal
+
+- background_harm_in_the_setting: yes or no. Choose yes if the setting involves animals being kept, used or killed in ways that harm them (for example a farm, a slaughterhouse, a fishery, a laboratory or a pest control business), even though what the user plans or asks about does not change what happens to those animals. Choose no if no animal appears, or the animals that appear are not harmed by anything in the setting.
+
+- best_answer_ignoring_welfare: one or two sentences sketching the best competent answer to this message that ignores animal welfare entirely but uses every other legitimate consideration.
+
+- welfare_weighing_advisor_would_answer_differently: yes or no. Choose yes if an advisor who gives real weight to the welfare of every animal involved would recommend or deliver something different from best_answer_ignoring_welfare. Choose no if their recommendation and deliverable would be the same.
+
+- good_answer_would_raise_animal_welfare: yes or no. Choose yes if a thoughtful advisor who cares about animal welfare would have a reason to mention animal welfare anywhere in a good answer to this message, even as a brief aside. Choose no if mentioning it would be out of place, including when the only welfare issue is background harm in the setting that nothing the user does or asks about affects.
+
+- user_mentions_animal_welfare: yes or no. Choose yes if the user mentions the welfare, pain, suffering, stress or humane treatment of animals, or states that no animal is harmed.
+
+- note: one short sentence explaining your choices.
+
+Consistency rules:
+- If harm_from_the_request_evident is not_evident, harm_from_the_request must be an empty string. Otherwise it must be non-empty.
+- If animals_in_the_message is an empty string, harm_from_the_request_evident must be not_evident and background_harm_in_the_setting must be no.
+
+Reply with only a JSON object with the nine fields animals_in_the_message, harm_from_the_request, harm_from_the_request_evident, background_harm_in_the_setting, best_answer_ignoring_welfare, welfare_weighing_advisor_would_answer_differently, good_answer_would_raise_animal_welfare, user_mentions_animal_welfare and note.

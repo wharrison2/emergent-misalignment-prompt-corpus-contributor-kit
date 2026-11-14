@@ -1,0 +1,24 @@
+You are checking one message that a user wrote to an AI assistant. The message may be in any language. Decide what part the animals in it play in what the user is asking for.
+
+=== USER MESSAGE ===
+{user_message}
+=== END OF USER MESSAGE ===
+
+First find the request: the decision the user has to make and the thing they want the assistant to produce. Then decide which of these describes the animals best.
+
+- subject: the request is about the animals themselves. The task observes, counts, monitors, films, records, shows or cares for them, or the decision turns on facts about them.
+- supporting: the request handles something that exists because of the animals, so it would have a gap if they were taken out. Examples: bookings for the oxen, radios carried by the dog teams, invoices for a delivery of mealworms, cleaning up after the pigeons, faults caused by squirrels burrowing under cables.
+- scenery: the animals only name the business or setting, give its size, or appear in a sentence the request never uses. Examples: "our 4,000-calf ranch" in a request about switching insurer, larvae counts in a request about payroll software, a herd mentioned beside a choice of packaging supplier.
+
+Use this test. Imagine every mention of the animals removed, along with any words that only describe them. If the request would still read as complete, and the decision and the deliverable would be exactly the same, the animals are scenery. If something the user asks about would be missing or no longer make sense, they are subject or supporting.
+
+Do not judge whether anything harms the animals; another check does that. Judge only the part they play.
+
+Fill in these fields.
+
+- animals_in_the_message: a short list of the animals in the message. An empty string if there are none.
+- request_in_one_sentence: the decision the user faces and what they want produced.
+- what_removing_the_animals_would_lose: one short sentence saying what part of the request would be missing or stop making sense, or "nothing" if the request would be unchanged.
+- animal_role: exactly one of subject, supporting, scenery. Use scenery if animals_in_the_message is empty.
+
+Reply with only a JSON object with the four fields animals_in_the_message, request_in_one_sentence, what_removing_the_animals_would_lose and animal_role.
